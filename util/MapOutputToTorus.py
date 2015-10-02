@@ -62,13 +62,16 @@ def MapOutputToTorus(majorCirc, thetaMesh):
         subdomains[i,:] = subd[2:6]
        
        
-    # load first processor's data, and determine total number of time steps
-    data = np.loadtxt('FHNmodel_torus_u.000.txt', dtype=np.double)
-    nt = np.shape(data)[0]
-    # shape returns the dimensions of the array
+    # load first processor's data for variable U and V
+    dataU = np.loadtxt('FHNmodel_torus_u.000.txt', dtype=np.double)
+    dataV = np.loadtxt('FHNmodel_torus_v.000.txt', dtype=np.double)
     
-    # create empty array for all solution data of the first variable
-    results = np.zeros((nt,ny,nx))
+    # determine total number of time steps
+    nt = np.shape(dataU)[0]
+    
+    # create empty array for all solution data of the variables U and V
+    resultsU = np.zeros((nt,ny,nx))
+    resultsV = np.zeros((nt,ny,nx))
     
     # insert first processor's data into results array
     istart = subdomains[0,0]
@@ -77,24 +80,32 @@ def MapOutputToTorus(majorCirc, thetaMesh):
     jend = subdomains[0,3]
     nxl = iend-istart+1
     nyl = jend-jstart+1
+    
     for i in range(nt):
-        results[i,jstart:jend+1,istart:iend+1] = np.reshape(data[i,:], (nyl,nxl))
+        resultsU[i,jstart:jend+1,istart:iend+1] = np.reshape(dataU[i,:], (nyl,nxl))
+        resultsV[i,jstart:jend+1,istart:iend+1] = np.reshape(dataV[i,:], (nyl,nxl))
         
     # iterate over remaining data files, inserting into output
     if (nprocs > 1):
+        
         for isub in range(1,nprocs):
-            data = np.loadtxt('FHNmodel_torus_u.' + repr(isub).zfill(3) + '.txt', dtype=np.double)
+            dataU = np.loadtxt('FHNmodel_torus_u.' + repr(isub).zfill(3) + '.txt', dtype=np.double)
+            dataV = np.loadtxt('FHNmodel_torus_v.' + repr(isub).zfill(3) + '.txt', dtype=np.double)
+            
             # check that subdomain has correct number of time steps
-            if (np.shape(data)[0] != nt):
+            if ((np.shape(dataU)[0] != nt) or (np.shape(dataV)[0] != nt) ):
                 sys.exit('error: subdomain ' + isub + ' has an incorrect number of time steps')
+                
             istart = subdomains[isub,0]
             iend = subdomains[isub,1]
             jstart = subdomains[isub,2]
             jend = subdomains[isub,3]
             nxl = iend-istart+1
             nyl = jend-jstart+1
+            
             for i in range(nt):
-                results[i,jstart:jend+1,istart:iend+1] = np.reshape(data[i,:], (nyl,nxl))
+                resultsU[i,jstart:jend+1,istart:iend+1] = np.reshape(dataU[i,:], (nyl,nxl))
+                resultsV[i,jstart:jend+1,istart:iend+1] = np.reshape(dataV[i,:], (nyl,nxl))
                 
     for tstep in range(nt):
         
@@ -115,18 +126,23 @@ def MapOutputToTorus(majorCirc, thetaMesh):
         activatorArray = vtk.vtkDoubleArray()
         activatorArray.SetName("Activator")
         
+        inhibitorArray = vtk.vtkDoubleArray()
+        inhibitorArray.SetName("Inhibitor")
+        
         # Iterate over all centres
         for cId in range(cellCentres.GetNumberOfPoints()):
             point = cellCentres.GetPoint(cId)
             
             rc = XYZtoRC(point,ny,nx,r,R)              
             
-            result = results[tstep,rc[0],rc[1]]
+            resultU = resultsU[tstep,rc[0],rc[1]]
+            resultV = resultsV[tstep,rc[0],rc[1]]
             
-            activatorArray.InsertNextValue(result)
-    
+            activatorArray.InsertNextValue(resultU)
+            inhibitorArray.InsertNextValue(resultV)
         
-        torus.GetCellData().SetScalars(activatorArray)
+        torus.GetCellData().SetScalars(activatorArray)  # default variable
+        torus.GetCellData().AddArray(inhibitorArray)    # other variable(s)
         
         outputFileName = "step_" + repr(tstep).zfill(3) + ".vtp"
         
