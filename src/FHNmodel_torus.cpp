@@ -80,14 +80,14 @@ using namespace std;
 /* *
  * PARAMETERS TO VARY - put in an ini file later:
  * */
-#define BETA 0.9					// Bifurcation parameter - system is oscillatory for BETA < 1, stable for BETA > 1
+#define BETA 1.1					// Bifurcation parameter - system is oscillatory for BETA < 1, stable for BETA > 1
 #define MAJORCIRC RCONST(80.0)		// Major circumference of the torus - use 80.0 for normal, 40.0 for more curved surface
-#define WAVELENGTH RCONST(0.01)		// Initial wave segment length as a percentage of total length of torus (phi)
-#define WAVEWIDTH RCONST(0.4)		// Initial wave segment width as a percentage of total width of torus (theta)
-#define WAVEINSIDE 0				// Bool/int for whether the initial wave is centered on the inside of the torus (true=1) or outside (false=0)
-#define OUTPUT_TIMESTEP 10			// Number of timesteps to output to file
-#define TMAX 0.0					// Time to turn off the absorbing boundary at phi = 0 (to eliminate backwards travelling waves) - set to 0 for no absorbing boundary
-#define TFINAL 10					// Time to run simulation
+#define WAVELENGTH RCONST(0.005)	// Initial wave segment length as a percentage of total length of torus (phi)
+#define WAVEWIDTH RCONST(0.3)		// Initial wave segment width as a percentage of total width of torus (theta)
+#define WAVEINSIDE 1				// Bool/int for whether the initial wave is centered on the inside of the torus (true=1) or outside (false=0)
+#define OUTPUT_TIMESTEP 100			// Number of timesteps to output to file
+#define TMAX 50.0					// Time to turn off the absorbing boundary at phi = 0 (to eliminate backwards travelling waves) - set to 0 for no absorbing boundary
+#define TFINAL 1000.0				// Time to run simulation
 #define NX 200						// Mesh size in theta direction
 
 
@@ -204,19 +204,23 @@ int main(int argc, char* argv[]) {
 	// Initial problem output
 	bool outproc = (udata->rank == 0);
 	if (outproc) {
-		cout << "\n2D FHN model PDE problem:\n";
+		cout << "\n2D FHN model PDE problem on a torus:\n";
 		cout << "   nprocs = " << udata->nprocs << "\n";
 		cout << "   nx = " << udata->nx << "\n";
 		cout << "   ny = " << udata->ny << "\n";
+		cout << "   nxl = " << udata->nxl << "\n";
+		cout << "   nyl = " << udata->nyl << "\n";
 		cout << "   Diff = " << udata->Diff << "\n";
+		cout << "   Beta = " << BETA << "\n";
+		cout << "   Tfinal = " << TFINAL << "\n";
+		cout << "   Output timesteps = " << OUTPUT_TIMESTEP << "\n";
+		cout << "   Major circumference = " << MAJORCIRC << "\n";
+		cout << "   Absorbing boundary turn off time = " << TMAX << "\n";
+		cout << "   Wavelength = " << WAVELENGTH << "\%\n";
+		cout << "   Wavewidth = " << WAVEWIDTH << "\%\n";
+		cout << "   Inside = " << WAVEINSIDE << "\n";
 		cout << "   rtol = " << rtol << "\n";
-		cout << "   atol = " << atol << "\n";
-		cout << "   nxl (proc 0) = " << udata->nxl << "\n";
-		cout << "   is (proc 0) = " << udata->is << "\n";
-		cout << "   ie (proc 0) = " << udata->ie << "\n";
-		cout << "   js (proc 0) = " << udata->js << "\n";
-		cout << "   je (proc 0) = " << udata->je << "\n";
-		cout << "   nyl (proc 0) = " << udata->nyl << "\n\n";
+		cout << "   atol = " << atol << "\n\n";
 	}
 
 	// Initialize data structures
@@ -314,8 +318,8 @@ int main(int argc, char* argv[]) {
 	char outname[100];
 	sprintf(outname, "FHNmodel_torus_subdomain.%03i.txt", udata->rank);
 	FILE *UFID = fopen(outname,"w");
-	fprintf(UFID, "%li  %li  %li  %li  %li  %li %f %f \n",
-			udata->nx, udata->ny, udata->is, udata->ie, udata->js, udata->je, XMIN, XMAX);
+	fprintf(UFID, "%li  %li  %li  %li  %li  %li %f %f %f\n",
+			udata->nx, udata->ny, udata->is, udata->ie, udata->js, udata->je, XMIN, XMAX, TFINAL);
 	fclose(UFID);
 
 	ydata = N_VGetArrayPointer(y);
