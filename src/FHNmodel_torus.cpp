@@ -55,7 +55,7 @@ __)----/ ' (  ) ' |    }
 using namespace std;
 
 // accessor macro between (x,y) location and 1D NVector array
-#define IDX(x,y) (NVARS*(x) + NVARS*(y)*nxl)
+#define IDX(x,y) (NVARS*(x) + NVARS*(y)*udata->nxl)
 
 // Constants
 #define PI RCONST(3.1415926535897932)
@@ -155,7 +155,6 @@ int main(int argc, char* argv[]) {
 	int Nt = OUTPUT_TIMESTEP;     		// total number of output times
 	long int nx = NX;             		// spatial mesh size
 	long int ny = NX*(radiusRatio);
-	long int offset;
 	int WaveInside = WAVEINSIDE;
 	realtype xx, yy;					// real x,y values
 	realtype Diff = DIFF;				// Diffusion coefficient for eq 1
@@ -245,7 +244,6 @@ int main(int argc, char* argv[]) {
 	}
 
 	// Set initial conditions
-	// *** Remove offset so it can be parallelised
 	ydata = N_VGetArrayPointer(y);
 	for (j=0; j<udata->nyl; j++)
 	{
@@ -261,17 +259,16 @@ int main(int argc, char* argv[]) {
 				if ( xx>WaveXMIN && xx<WaveXMAX && yy>WaveLength && yy<(2.0*WaveLength) )
 				{
 					// Set perturbed wave segment to higher initial values
-					ydata[offset] = RCONST(-BETA+2);								// u
-					ydata[offset + 1] = RCONST(BETA*BETA*BETA - 3*BETA + 1.5);		// v
+					ydata[IDX(i,j)] = RCONST(-BETA+2);									// u
+					ydata[IDX(i,j) + 1] = RCONST(BETA*BETA*BETA - 3*BETA + 1.5);		// v
 				}
 				else
 				{
 					// Set rest of area to stable u,v
-					ydata[offset] = RCONST(-BETA);									// u
-					ydata[offset + 1] = RCONST(BETA*BETA*BETA - 3*BETA);			// v
+					ydata[IDX(i,j)] = RCONST(-BETA);									// u
+					ydata[IDX(i,j) + 1] = RCONST(BETA*BETA*BETA - 3*BETA);				// v
 
 				}
-				offset += NVARS;
 			}
 			else if (WaveInside == 0)
 			{
@@ -279,17 +276,16 @@ int main(int argc, char* argv[]) {
 				if ( (xx>WaveXMIN || xx<WaveXMAX) && yy>WaveLength && yy<(2.0*WaveLength) )
 				{
 					// Set perturbed wave segment to higher initial values
-					ydata[offset] = RCONST(-BETA+2);								// u
-					ydata[offset + 1] = RCONST(BETA*BETA*BETA - 3*BETA + 1.5);		// v
+					ydata[IDX(i,j)] = RCONST(-BETA+2);									// u
+					ydata[IDX(i,j) + 1] = RCONST(BETA*BETA*BETA - 3*BETA + 1.5);		// v
 				}
 				else
 				{
 					// Set rest of area to stable u,v
-					ydata[offset] = RCONST(-BETA);									// u
-					ydata[offset + 1] = RCONST(BETA*BETA*BETA - 3*BETA);			// v
+					ydata[IDX(i,j)] = RCONST(-BETA);									// u
+					ydata[IDX(i,j) + 1] = RCONST(BETA*BETA*BETA - 3*BETA);				// v
 
 				}
-				offset += NVARS;
 			}
 		}
 	}
@@ -330,15 +326,12 @@ int main(int argc, char* argv[]) {
 	FILE *UFID2 = fopen(outname, "w");
 
 	// Write initial conditions to files, one for each variable in each subdomain
-	// *** Remove offset
-	offset = 0;
 	for (j=0; j<udata->nyl; j++)
 	{
 		for (i=0; i<udata->nxl; i++)
 		{
-			fprintf(UFID," %.16e", ydata[offset]);
-			fprintf(UFID2," %.16e", ydata[offset+1]);
-			offset += NVARS;
+			fprintf(UFID," %.16e", ydata[IDX(i,j)]);
+			fprintf(UFID2," %.16e", ydata[IDX(i,j) + 1]);
 		}
 	}
 	fprintf(UFID,"\n");
@@ -370,15 +363,12 @@ int main(int argc, char* argv[]) {
 		}
 
 		// output results to disk
-		// *** Remove offset
-		offset = 0;
 		for (j=0; j<udata->nyl; j++)
 		{
 			for (i=0; i<udata->nxl; i++)
 			{
-				fprintf(UFID," %.16e", ydata[offset]);
-				fprintf(UFID2," %.16e", ydata[offset+1]);
-				offset += NVARS;
+				fprintf(UFID," %.16e", ydata[IDX(i,j)]);
+				fprintf(UFID2," %.16e", ydata[IDX(i,j) + 1]);
 			}
 		}
 		fprintf(UFID,"\n");
@@ -411,7 +401,6 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	UserData *udata = (UserData *) user_data;      // access problem data
 	long int nxl = udata->nxl;                     // set variable shortcuts
 	long int nyl = udata->nyl;
-	long int offset = 0;
 	realtype xx, yy;
 	realtype Diff = udata->Diff;
 	realtype dx = udata->dx;
@@ -762,12 +751,10 @@ static int Exchange(N_Vector y, UserData *udata)
 	}
 
 	// Send data
-	long int offset = 0;
 	for (i=0; i<nyl; i++)
 	{
-		udata->Wsend[offset] = Y[IDX(nxl-1,i)];		// Fill data to send with Y values on West side
-		udata->Wsend[offset+1] = Y[IDX(nxl-1,i)+1];
-		offset += NVARS;
+		udata->Wsend[2*i] = Y[IDX(nxl-1,i)];		// Fill data to send with Y values on West side
+		udata->Wsend[2*i + 1] = Y[IDX(nxl-1,i)+1];
 	}
 	ierr = MPI_Isend(udata->Wsend, NVARS*(udata->nyl), REALTYPE_MPI_TYPE, ipW, 0,
 			udata->comm, &reqSW);
@@ -776,12 +763,10 @@ static int Exchange(N_Vector y, UserData *udata)
 		return -1;
 	}
 
-	offset = 0;
 	for (i=0; i<nyl; i++)
 	{
-		udata->Esend[offset] = Y[IDX(0,i)];
-		udata->Esend[offset+1] = Y[IDX(0,i)+1];
-		offset += NVARS;
+		udata->Esend[2*i] = Y[IDX(0,i)];
+		udata->Esend[2*i + 1] = Y[IDX(0,i)+1];
 	}
 	ierr = MPI_Isend(udata->Esend, NVARS*(udata->nyl), REALTYPE_MPI_TYPE, ipE, 1,
 			udata->comm, &reqSE);
@@ -790,12 +775,10 @@ static int Exchange(N_Vector y, UserData *udata)
 		return -1;
 	}
 
-	offset = 0;
 	for (i=0; i<nxl; i++)
 	{
-		udata->Ssend[offset] = Y[IDX(i,nyl-1)];
-		udata->Ssend[offset+1] = Y[IDX(i,nyl-1)+1];
-		offset += NVARS;
+		udata->Ssend[2*i] = Y[IDX(i,nyl-1)];
+		udata->Ssend[2*i + 1] = Y[IDX(i,nyl-1)+1];
 	}
 	ierr = MPI_Isend(udata->Ssend, NVARS*(udata->nxl), REALTYPE_MPI_TYPE, ipS, 2,
 			udata->comm, &reqSS);
@@ -804,12 +787,10 @@ static int Exchange(N_Vector y, UserData *udata)
 		return -1;
 	}
 
-	offset = 0;
 	for (i=0; i<nxl; i++)
 	{
-		udata->Nsend[offset] = Y[IDX(i,0)];
-		udata->Nsend[offset+1] = Y[IDX(i,0)+1];
-		offset += NVARS;
+		udata->Nsend[2*i] = Y[IDX(i,0)];
+		udata->Nsend[2*i + 1] = Y[IDX(i,0)+1];
 	}
 	ierr = MPI_Isend(udata->Nsend, NVARS*(udata->nxl), REALTYPE_MPI_TYPE, ipN, 3,
 			udata->comm, &reqSN);
