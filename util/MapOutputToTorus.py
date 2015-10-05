@@ -5,6 +5,7 @@ import vtk
 import sys
 import numpy as np
 import math
+from configobj import ConfigObj
 
 def XYZtoRC(xyz,ny,nx,r,R):
     '''Convert (x,y,z) to (phi,theta) to (row,column) of results array'''
@@ -26,10 +27,16 @@ def XYZtoRC(xyz,ny,nx,r,R):
     rc = (int(phi/(2*np.pi)*(ny-1)), int(theta/(2*np.pi)*(nx-1)) )
 
     return rc
+    
 
-def MapOutputToTorus(majorCirc, thetaMesh):
-    ''' majorCirc = major circumference of the torus. Set to either 40 or 80
-        thetaMesh = number of mesh points in theta direction '''
+def MapOutputToTorus(programArguments):
+    ''' programArguments: ini file containing model parameters'''
+    
+    # Load relevant parameters from ini file
+    conf = ConfigObj(programArguments)
+    parameters = conf['Parameters']
+    majorCirc = parameters['majorCirc']
+    thetaMesh = parameters['thetaMesh']
 
     # Minor radius of torus
     r = 20/(2*np.pi)
@@ -152,7 +159,7 @@ def MapOutputToTorus(majorCirc, thetaMesh):
         writer.Update()
 
 if __name__ == '__main__':
-    if len(sys.argv) != 3:
-        print "Usage: " + sys.argv[0] + " <Major Circumference> <Theta Mesh Size>"
+    if len(sys.argv) != 2:
+        print "Usage: " + sys.argv[0] + " <Program Arguments>"
     else:
-        MapOutputToTorus(sys.argv[1], sys.argv[2])
+        MapOutputToTorus(sys.argv[1])

@@ -46,12 +46,14 @@ __)----/ ' (  ) ' |    }
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
-#include "arkode/arkode.h"            // prototypes for ARKode fcts., consts.
-#include "nvector/nvector_parallel.h" // parallel N_Vector types, fcts., macros
-#include "arkode/arkode_pcg.h"        // prototype for ARKPcg solver
-#include "sundials/sundials_types.h"  // def. of type 'realtype'
-#include <sundials/sundials_math.h>   // math macros
-#include "mpi.h"                      // MPI header file
+#include "arkode/arkode.h"            			// prototypes for ARKode fcts., consts.
+#include "nvector/nvector_parallel.h" 			// parallel N_Vector types, fcts., macros
+#include "arkode/arkode_pcg.h"        			// prototype for ARKPcg solver
+#include "sundials/sundials_types.h"  			// def. of type 'realtype'
+#include <sundials/sundials_math.h>   			// math macros
+#include "mpi.h"                      			// MPI header file
+#include <boost/property_tree/ptree.hpp>		//
+#include <boost/property_tree/ini_parser.hpp>
 using namespace std;
 
 // accessor macro between (x,y) location and 1D NVector array
@@ -77,18 +79,16 @@ using namespace std;
 #define YMAX         RCONST(2.0*PI)
 
 
-/* *
- * PARAMETERS TO VARY - put in an ini file later:
- * */
-#define BETA 1.1					// Bifurcation parameter - system is oscillatory for BETA < 1, stable for BETA > 1
-#define MAJORCIRC RCONST(80.0)		// Major circumference of the torus - use 80.0 for normal, 40.0 for more curved surface
-#define WAVELENGTH RCONST(0.005)	// Initial wave segment length as a percentage of total length of torus (phi)
-#define WAVEWIDTH RCONST(0.3)		// Initial wave segment width as a percentage of total width of torus (theta)
-#define WAVEINSIDE 1				// Bool/int for whether the initial wave is centered on the inside of the torus (true=1) or outside (false=0)
-#define OUTPUT_TIMESTEP 100			// Number of timesteps to output to file
-#define TMAX 50.0					// Time to turn off the absorbing boundary at phi = 0 (to eliminate backwards travelling waves) - set to 0 for no absorbing boundary
-#define TFINAL 1000.0				// Time to run simulation
-#define NX 200						// Mesh size in theta direction
+// Initialise parameters, found in ini file
+double BETA = 0.0;					// Bifurcation parameter - system is oscillatory for BETA < 1, stable for BETA > 1
+double MAJORCIRC = 0.0;	 			// Major circumference of the torus - use 80.0 for normal, 40.0 for more curved surface
+double WAVELENGTH = 0.005;			// Initial wave segment length as a percentage of total length of torus (phi)
+double WAVEWIDTH = 0.3;				// Initial wave segment width as a percentage of total width of torus (theta)
+int WAVEINSIDE =  1;				// Bool/int for whether the initial wave is centered on the inside of the torus (true=1) or outside (false=0)
+int OUTPUT_TIMESTEP = 5; 			// Number of timesteps to output to file
+double TMAX = 30.0;					// Time to turn off the absorbing boundary at phi = 0 (to eliminate backwards travelling waves) - set to 0 for no absorbing boundary
+double TFINAL = 30.0;				// Time to run simulation
+int NX = 200;						// Mesh size in theta direction
 
 
 // user data structure
@@ -140,11 +140,30 @@ static int Exchange(N_Vector y, UserData *udata);
 //    frees memory allocated within UserData
 static int FreeUserData(UserData *udata);
 
+// printf("[%d]---%s:%d\n", rank, __FILE__, __LINE__);
 
 // Main Program
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[])
+{
+	// Output error if user does not specify parameter ini file
+	if(argc != 2)
+	{
+		std::cerr << "Usage: " << argv[0] << " <Config file path>";
+		exit(EXIT_FAILURE);
+	}
 
-	// printf("[%d]---%s:%d\n", rank, __FILE__, __LINE__);
+	// Obtain model parameters from ini file
+	boost::property_tree::ptree pt;
+	boost::property_tree::ini_parser::read_ini(argv[1], pt);
+	BETA = pt.get<double>("Parameters.beta");
+	MAJORCIRC = pt.get<double>("Parameters.majorCirc");
+	WAVELENGTH = pt.get<double>("Parameters.waveLength");
+	WAVEWIDTH = pt.get<double>("Parameters.waveWidth");
+	WAVEINSIDE = pt.get<int>("Parameters.waveInside");
+	OUTPUT_TIMESTEP = pt.get<int>("Parameters.outputTimestep");
+	TMAX = pt.get<double>("Parameters.tMax");
+	TFINAL = pt.get<double>("Parameters.tFinal");
+	NX = pt.get<int>("Parameters.thetaMesh");
 
 	// general problem parameters
 	realtype T0 = RCONST(0.0);   		// initial time
@@ -247,7 +266,7 @@ int main(int argc, char* argv[]) {
 		printf("WaveInside must be 0 or 1");
 	}
 
-	// Set initial conditions
+	// Set initial conditions - these are model dependent.
 	ydata = N_VGetArrayPointer(y);
 	for (j=0; j<udata->nyl; j++)
 	{
@@ -423,12 +442,13 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	long int i, j;
 	for (j=1; j<nyl-1; j++)
 	{
+		yy = YMIN + (udata->js+j)*(dy);
 		for (i=1; i<nxl-1; i++)
 		{
 			// Fill in diffusion for u variable
 			xx = XMIN + (udata->is+i)*(dx);
-			yy = YMIN + (udata->js+j)*(dy);
 
+			// Note that diffusion is different depending on the coordinate system
 			ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - yarray[IDX(i-1,j)]) )/(2*dx)
 							+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
 							+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (yarray[IDX(i,j+1)] - 2*yarray[IDX(i,j)] + yarray[IDX(i,j-1)]))/(dx*dx);
@@ -439,9 +459,9 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	// iterate over subdomain boundaries
 	// West face
 	i=0;
+	xx = XMIN + (udata->is+i)*(dx);
 	for (j=1; j<nyl-1; j++)
 	{
-		xx = XMIN + (udata->is+i)*(dx);
 		yy = YMIN + (udata->js+j)*(dy);
 
 		ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - udata->Wrecv[NVARS*j]) )/(2*dx)
@@ -450,9 +470,9 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	}
 	// East face
 	i=nxl-1;
+	xx = XMIN + (udata->is+i)*(dx);
 	for (j=1; j<nyl-1; j++)
 	{
-		xx = XMIN + (udata->is+i)*(dx);
 		yy = YMIN + (udata->js+j)*(dy);
 
 		ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(udata->Erecv[NVARS*j] - yarray[IDX(i-1,j)]) )/(2*dx)
@@ -462,6 +482,7 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	}
 	// South face: absorbing boundary at phi = 0, if js = 0 and time < TMAX, so that no backwards travelling waves occur
 	j=0;
+	yy = YMIN + (udata->js+j)*(dy);
 	if (udata->js == 0 && t<TMAX)
 	{
 		for (i=1; i<nxl-1; i++)
@@ -474,7 +495,6 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 		for (i=1; i<nxl-1; i++)
 		{
 			xx = XMIN + (udata->is+i)*(dx);
-			yy = YMIN + (udata->js+j)*(dy);
 
 			ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - yarray[IDX(i-1,j)]) )/(2*dx)
 								+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
@@ -483,10 +503,10 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	}
 	// North face
 	j=nyl-1;
+	yy = YMIN + (udata->js+j)*(dy);
 	for (i=1; i<nxl-1; i++)
 	{
 		xx = XMIN + (udata->is+i)*(dx);
-		yy = YMIN + (udata->js+j)*(dy);
 
 		ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - yarray[IDX(i-1,j)]) )/(2*dx)
 							+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)

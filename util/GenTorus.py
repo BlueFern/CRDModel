@@ -1,10 +1,16 @@
 import sys
 import vtk
 import numpy as np
+from configobj import ConfigObj
 
-def GenTorus(majorCirc, thetaMesh):
-    ''' majorCirc = major circumference of the torus. Set to either 40 or 80
-        thetaMesh = number of mesh points in theta direction '''
+def GenTorus(programArguments):
+    ''' programArguments: ini file containing model parameters'''
+    
+    # Load relevant parameters from ini file
+    conf = ConfigObj(programArguments)
+    parameters = conf['Parameters']
+    majorCirc = parameters['majorCirc']
+    thetaMesh = parameters['thetaMesh']
     
     thetaResolution = int(thetaMesh)    
     
@@ -41,7 +47,7 @@ def GenTorus(majorCirc, thetaMesh):
     writer.Update()
 
 if __name__ == '__main__':
-    if len(sys.argv) != 3:
-        print "Usage: " + sys.argv[0] + " <Major Circumference> <Theta Mesh Size>"
+    if len(sys.argv) != 2:
+        print "Usage: " + sys.argv[0] + " <Program Arguments>"
     else:
-        GenTorus(sys.argv[1], sys.argv[2])
+        GenTorus(sys.argv[1])
