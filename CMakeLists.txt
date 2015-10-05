@@ -18,7 +18,7 @@ include_directories(${MPI_CXX_INCLUDE_PATH})
 
 # Add variable targets.
 SET(Targets
-  FHNmodel
+  FHNmodel_flat
   FHNmodel_torus
   )
 
@@ -34,19 +34,6 @@ ELSE(MPI_MPICXX)
   # add MPI_INCLUDE_PATH to include directories
   INCLUDE_DIRECTORIES(${MPI_INCLUDE_PATH})
 ENDIF(MPI_MPICXX)
-
-# Set-up linker flags and link libraries
-
-# SET(SUNDIALS_LIBS ${ARKODE_LIB} ${NVECP_LIB} ${EXTRA_LINK_LIBS})
-#IF(LAPACK_FOUND)
-#  LIST(APPEND SUNDIALS_LIBS ${LAPACK_LIBRARIES})
-#ENDIF(LAPACK_FOUND)
-#IF(KLU_FOUND)
-#  LIST(APPEND SUNDIALS_LIBS ${KLU_LIBRARIES})
-#ENDIF(KLU_FOUND)
-#IF(SUPERLUMT_FOUND)
-#  LIST(APPEND SUNDIALS_LIBS ${SUPERLUMT_LIBRARIES})
-#ENDIF(SUPERLUMT_FOUND)
 
 # Add the build and install targets for each target.
 

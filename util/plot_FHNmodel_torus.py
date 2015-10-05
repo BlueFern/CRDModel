@@ -10,8 +10,6 @@ from matplotlib import cm
 import matplotlib.pyplot as plt
 import os
 
-
-
 # determine the number of MPI processes used
 nprocs=1
 for i in range(1000):

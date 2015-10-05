@@ -35,8 +35,10 @@ def MapOutputToTorus(programArguments):
     # Load relevant parameters from ini file
     conf = ConfigObj(programArguments)
     parameters = conf['Parameters']
+    systemParameters = conf['System']
     majorCirc = parameters['majorCirc']
     thetaMesh = parameters['thetaMesh']
+    includeAllVars = systemParameters['includeAllVars']
 
     # Minor radius of torus
     r = 20/(2*np.pi)
@@ -71,14 +73,14 @@ def MapOutputToTorus(programArguments):
        
     # load first processor's data for variable U and V
     dataU = np.loadtxt('FHNmodel_torus_u.000.txt', dtype=np.double)
-    dataV = np.loadtxt('FHNmodel_torus_v.000.txt', dtype=np.double)
+    if (includeAllVars == 1):  dataV = np.loadtxt('FHNmodel_torus_v.000.txt', dtype=np.double)
     
     # determine total number of time steps
     nt = np.shape(dataU)[0]
     
     # create empty array for all solution data of the variables U and V
     resultsU = np.zeros((nt,ny,nx))
-    resultsV = np.zeros((nt,ny,nx))
+    if (includeAllVars == 1): resultsV = np.zeros((nt,ny,nx))
     
     # insert first processor's data into results array
     istart = subdomains[0,0]
@@ -90,17 +92,17 @@ def MapOutputToTorus(programArguments):
     
     for i in range(nt):
         resultsU[i,jstart:jend+1,istart:iend+1] = np.reshape(dataU[i,:], (nyl,nxl))
-        resultsV[i,jstart:jend+1,istart:iend+1] = np.reshape(dataV[i,:], (nyl,nxl))
+        if (includeAllVars == 1): resultsV[i,jstart:jend+1,istart:iend+1] = np.reshape(dataV[i,:], (nyl,nxl))
         
     # iterate over remaining data files, inserting into output
     if (nprocs > 1):
         
         for isub in range(1,nprocs):
             dataU = np.loadtxt('FHNmodel_torus_u.' + repr(isub).zfill(3) + '.txt', dtype=np.double)
-            dataV = np.loadtxt('FHNmodel_torus_v.' + repr(isub).zfill(3) + '.txt', dtype=np.double)
+            if (includeAllVars == 1): dataV = np.loadtxt('FHNmodel_torus_v.' + repr(isub).zfill(3) + '.txt', dtype=np.double)
             
             # check that subdomain has correct number of time steps
-            if ((np.shape(dataU)[0] != nt) or (np.shape(dataV)[0] != nt) ):
+            if (np.shape(dataU)[0] != nt):
                 sys.exit('error: subdomain ' + isub + ' has an incorrect number of time steps')
                 
             istart = subdomains[isub,0]
@@ -112,7 +114,7 @@ def MapOutputToTorus(programArguments):
             
             for i in range(nt):
                 resultsU[i,jstart:jend+1,istart:iend+1] = np.reshape(dataU[i,:], (nyl,nxl))
-                resultsV[i,jstart:jend+1,istart:iend+1] = np.reshape(dataV[i,:], (nyl,nxl))
+                if (includeAllVars == 1): resultsV[i,jstart:jend+1,istart:iend+1] = np.reshape(dataV[i,:], (nyl,nxl))
                 
     for tstep in range(nt):
         
@@ -133,8 +135,9 @@ def MapOutputToTorus(programArguments):
         activatorArray = vtk.vtkDoubleArray()
         activatorArray.SetName("Activator")
         
-        inhibitorArray = vtk.vtkDoubleArray()
-        inhibitorArray.SetName("Inhibitor")
+        if (includeAllVars == 1): 
+            inhibitorArray = vtk.vtkDoubleArray()
+            inhibitorArray.SetName("Inhibitor")
         
         # Iterate over all centres
         for cId in range(cellCentres.GetNumberOfPoints()):
@@ -143,13 +146,13 @@ def MapOutputToTorus(programArguments):
             rc = XYZtoRC(point,ny,nx,r,R)              
             
             resultU = resultsU[tstep,rc[0],rc[1]]
-            resultV = resultsV[tstep,rc[0],rc[1]]
+            if (includeAllVars == 1): resultV = resultsV[tstep,rc[0],rc[1]]
             
             activatorArray.InsertNextValue(resultU)
-            inhibitorArray.InsertNextValue(resultV)
+            if (includeAllVars == 1): inhibitorArray.InsertNextValue(resultV)
         
         torus.GetCellData().SetScalars(activatorArray)  # default variable
-        torus.GetCellData().AddArray(inhibitorArray)    # other variable(s)
+        if (includeAllVars == 1): torus.GetCellData().AddArray(inhibitorArray)    # other variable(s)
         
         outputFileName = "step_" + repr(tstep).zfill(3) + ".vtp"
         

@@ -1,5 +1,5 @@
-/* Fitz Hugh Nagumo neuron model with periodic BCs on a 2D torus. ICs: stable state everywhere apart from
- * a small rectangle centred on either the outside (theta=0) or inside (theta=pi) of the torus.
+/* Fitz Hugh Nagumo neuron model with periodic BCs on a 2D flat surface. ICs: stable state everywhere apart from
+ * a small rectangle centred on the surface.
  *
  * The model equations are:
  *
@@ -64,7 +64,7 @@ using namespace std;
 #define ONE RCONST(1.0)
 #define TWO RCONST(2.0)
 #define THREE RCONST(3.0)
-#define MINORCIRC RCONST(20.0) 	// Minor circumference of the torus
+#define SURFACEWIDTH RCONST(20.0) 	// Width of the flat surface
 
 // System parameters
 #define EPSILON 0.36			// Time scale separation of the two variables
@@ -73,15 +73,12 @@ using namespace std;
 // Number of variables in the system
 #define NVARS 2
 
-#define XMIN         RCONST(0.0)                // grid boundaries in theta
-#define XMAX         RCONST(2.0*PI)
-#define YMIN         RCONST(0.0)        		// grid boundaries in phi
-#define YMAX         RCONST(2.0*PI)
-
+// Initialise boundary values
+double XMIN, XMAX, YMIN, YMAX;
 
 // Initialise parameters, found in ini file
 double BETA = 0.0;					// Bifurcation parameter - system is oscillatory for BETA < 1, stable for BETA > 1
-double MAJORCIRC = 0.0;	 			// Major circumference of the torus - use 80.0 for normal, 40.0 for more curved surface
+double SURFACELENGTH = 0.0;	 		// Length of the flat surface, usually 80 or 40 to match with the corresponding torus
 double WAVELENGTH = 0.0;			// Initial wave segment length as a percentage of total length of torus (phi)
 double WAVEWIDTH = 0.0;				// Initial wave segment width as a percentage of total width of torus (theta)
 int WAVEINSIDE =  0;				// Bool/int for whether the initial wave is centered on the inside of the torus (true=1) or outside (false=0)
@@ -115,8 +112,6 @@ typedef struct {
 	realtype *Wsend;
 	realtype *Nsend;
 	realtype *Ssend;
-	realtype R;
-	realtype r;
 } UserData;
 
 // User-supplied Function Called by the Solver
@@ -156,25 +151,27 @@ int main(int argc, char* argv[])
 	boost::property_tree::ptree pt;
 	boost::property_tree::ini_parser::read_ini(argv[1], pt);
 	BETA = pt.get<double>("Parameters.beta");
-	MAJORCIRC = pt.get<double>("Parameters.majorCirc");
+	SURFACELENGTH = pt.get<double>("Parameters.majorCirc");		// This is the length of the flat surface
 	WAVELENGTH = pt.get<double>("Parameters.waveLength");
 	WAVEWIDTH = pt.get<double>("Parameters.waveWidth");
-	WAVEINSIDE = pt.get<int>("Parameters.waveInside");
 	OUTPUT_TIMESTEP = pt.get<int>("Parameters.outputTimestep");
 	TMAX = pt.get<double>("Parameters.tMax");
 	TFINAL = pt.get<double>("Parameters.tFinal");
-	NX = pt.get<int>("Parameters.thetaMesh");
+	NX = pt.get<int>("Parameters.thetaMesh");				// This is the mesh of the X direction
 	INCLUDEALLVARS = pt.get<int>("System.includeAllVars");
+
+	XMIN = 0.0;				                // grid boundaries in theta
+	XMAX =  SURFACEWIDTH - XMIN;
+	YMIN = 0.0;			    	    		// grid boundaries in phi
+	YMAX = SURFACELENGTH - YMIN;
 
 	// general problem parameters
 	realtype T0 = RCONST(0.0);   		// initial time
 	realtype Tf = TFINAL;     			// final time
-	realtype r = MINORCIRC/(2.0*PI); 	// Minor radius
-	realtype R = MAJORCIRC/(2.0*PI); 	// Major radius
-	realtype radiusRatio = R/r;
 	int Nt = OUTPUT_TIMESTEP;     		// total number of output times
+	long int lengthWidthRatio = SURFACELENGTH/SURFACEWIDTH;
 	long int nx = NX;             		// spatial mesh size
-	long int ny = NX*(radiusRatio);
+	long int ny = NX*lengthWidthRatio;
 	int WaveInside = WAVEINSIDE;
 	realtype xx, yy;					// real x,y values
 	realtype Diff = DIFF;				// Diffusion coefficient for eq 1
@@ -208,8 +205,6 @@ int main(int argc, char* argv[])
 	flag = InitUserData(udata);
 	if (check_flag(&flag, "InitUserData", 1)) return 1;
 
-	udata->R = R;
-	udata->r = r;
 	udata->rank = rank;
 	udata->nx = nx;
 	udata->ny = ny;
@@ -234,11 +229,10 @@ int main(int argc, char* argv[])
 		cout << "   Beta = " << BETA << "\n";
 		cout << "   Tfinal = " << TFINAL << "\n";
 		cout << "   Output timesteps = " << OUTPUT_TIMESTEP << "\n";
-		cout << "   Major circumference = " << MAJORCIRC << "\n";
+		cout << "   Surface length = " << SURFACELENGTH << "\n";
 		cout << "   Absorbing boundary turn off time = " << TMAX << "\n";
 		cout << "   Wavelength = " << WAVELENGTH << "\%\n";
 		cout << "   Wavewidth = " << WAVEWIDTH << "\%\n";
-		cout << "   Wave inside = " << WAVEINSIDE << "\n";
 		cout << "   rtol = " << rtol << "\n";
 		cout << "   atol = " << atol << "\n";
 		cout << "   Include all variables in output = " << INCLUDEALLVARS << "\n";
@@ -250,23 +244,9 @@ int main(int argc, char* argv[])
 	y = N_VNew_Parallel(udata->comm, N, Ntot);         // Create parallel vector for solution
 	if (check_flag((void *) y, "N_VNew_Parallel", 0)) return 1;
 
-	// Check where the initial wave segment is centred and adjust wave midpoint and the X limits of the segment accordingly
-	if (WaveInside == 1)
-	{
-		WaveMidpoint = PI;
-		WaveXMIN  = WaveMidpoint - WaveWidth/2.0;
-		WaveXMAX  = WaveMidpoint + WaveWidth/2.0;
-	}
-	else if (WaveInside == 0)
-	{
-		WaveMidpoint = 0.0;
-		WaveXMIN  = WaveMidpoint - WaveWidth/2.0 + (XMAX-XMIN);	// Add (XMAX-XMIN) to convert from negative to positive number in the range [XMIN,XMAX]
-		WaveXMAX  = WaveMidpoint + WaveWidth/2.0;
-	}
-	else
-	{
-		printf("WaveInside must be 0 or 1");
-	}
+	WaveMidpoint = SURFACEWIDTH/2.0;
+	WaveXMIN  = WaveMidpoint - WaveWidth/2.0;
+	WaveXMAX  = WaveMidpoint + WaveWidth/2.0;
 
 	// Set initial conditions - these are model dependent.
 	ydata = N_VGetArrayPointer(y);
@@ -278,8 +258,6 @@ int main(int argc, char* argv[])
 		{
 			xx = XMIN + (udata->is+i)*(udata->dx);					// Actual x values
 
-			if (WaveInside == 1)
-			{
 				// Set initial wave segment
 				if ( xx>WaveXMIN && xx<WaveXMAX && yy>WaveLength && yy<(2.0*WaveLength) )
 				{
@@ -294,24 +272,6 @@ int main(int argc, char* argv[])
 					ydata[IDX(i,j) + 1] = RCONST(BETA*BETA*BETA - 3*BETA);				// v
 
 				}
-			}
-			else if (WaveInside == 0)
-			{
-				// Set initial wave segment
-				if ( (xx>WaveXMIN || xx<WaveXMAX) && yy>WaveLength && yy<(2.0*WaveLength) )
-				{
-					// Set perturbed wave segment to higher initial values
-					ydata[IDX(i,j)] = RCONST(-BETA+2);									// u
-					ydata[IDX(i,j) + 1] = RCONST(BETA*BETA*BETA - 3*BETA + 1.5);		// v
-				}
-				else
-				{
-					// Set rest of area to stable u,v
-					ydata[IDX(i,j)] = RCONST(-BETA);									// u
-					ydata[IDX(i,j) + 1] = RCONST(BETA*BETA*BETA - 3*BETA);				// v
-
-				}
-			}
 		}
 	}
 
@@ -336,7 +296,7 @@ int main(int argc, char* argv[])
 
 	// Each processor outputs subdomain information
 	char outname[100];
-	sprintf(outname, "FHNmodel_torus_subdomain.%03i.txt", udata->rank);
+	sprintf(outname, "FHNmodel_flat_subdomain.%03i.txt", udata->rank);
 	FILE *UFID = fopen(outname,"w");
 	fprintf(UFID, "%li  %li  %li  %li  %li  %li %f %f %f\n",
 			udata->nx, udata->ny, udata->is, udata->ie, udata->js, udata->je, XMIN, XMAX, TFINAL);
@@ -344,10 +304,10 @@ int main(int argc, char* argv[])
 
 	ydata = N_VGetArrayPointer(y);
 
-	sprintf(outname, "FHNmodel_torus_u.%03i.txt", udata->rank);
+	sprintf(outname, "FHNmodel_flat_u.%03i.txt", udata->rank);
 	UFID = fopen(outname, "w");
 
-	sprintf(outname, "FHNmodel_torus_v.%03i.txt", udata->rank);
+	sprintf(outname, "FHNmodel_flat_v.%03i.txt", udata->rank);
 	FILE *UFID2 = fopen(outname, "w");
 
 
@@ -451,8 +411,6 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	realtype Diff = udata->Diff;
 	realtype dx = udata->dx;
 	realtype dy = udata->dy;
-	realtype R = udata->R;
-	realtype r = udata->r;
 	realtype *yarray, *ydotarray;
 	yarray = NV_DATA_P(y);           // access data arrays
 	ydotarray = NV_DATA_P(ydot);
@@ -462,6 +420,9 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	if (check_flag(&ierr, "Exchange", 1)) return -1;
 
 	// iterate over subdomain interior, computing approximation to RHS
+	realtype cu1 = Diff/dx/dx;			// D/delx^2
+	realtype cu2 = Diff/dy/dy;			// D/dely^2
+	realtype cu3 = -TWO*(cu1 + cu2);
 	long int i, j;
 	for (j=1; j<nyl-1; j++)
 	{
@@ -469,43 +430,31 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 		for (i=1; i<nxl-1; i++)
 		{
 			// Fill in diffusion for u variable
-			xx = XMIN + (udata->is+i)*(dx);
-
-			// Note that diffusion is different depending on the coordinate system - this is for a torus
-			ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - yarray[IDX(i-1,j)]) )/(2*dx)
-							+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
-							+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (yarray[IDX(i,j+1)] - 2*yarray[IDX(i,j)] + yarray[IDX(i,j-1)]))/(dx*dx);
-
-
+			ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + yarray[IDX(i+1,j)])
+							 + cu2*(yarray[IDX(i,j-1)] + yarray[IDX(i,j+1)])
+							 + cu3*yarray[IDX(i,j)];
 		}
 	}
 	// iterate over subdomain boundaries
 	// West face
 	i=0;
-	xx = XMIN + (udata->is+i)*(dx);
 	for (j=1; j<nyl-1; j++)
 	{
-		yy = YMIN + (udata->js+j)*(dy);
-
-		ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - udata->Wrecv[NVARS*j]) )/(2*dx)
-							+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + udata->Wrecv[NVARS*j]))/(dx*dx)
-							+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (yarray[IDX(i,j+1)] - 2*yarray[IDX(i,j)] + yarray[IDX(i,j-1)]))/(dx*dx);
+		ydotarray[IDX(i,j)] = cu1*(udata->Wrecv[NVARS*j]   + yarray[IDX(i+1,j)])
+						 + cu2*(yarray[IDX(i,j-1)] + yarray[IDX(i,j+1)])
+						 + cu3*yarray[IDX(i,j)];
 	}
 	// East face
 	i=nxl-1;
-	xx = XMIN + (udata->is+i)*(dx);
+
 	for (j=1; j<nyl-1; j++)
 	{
-		yy = YMIN + (udata->js+j)*(dy);
-
-		ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(udata->Erecv[NVARS*j] - yarray[IDX(i-1,j)]) )/(2*dx)
-							+ Diff*( (1/(r*r))* (udata->Erecv[NVARS*j] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
-							+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (yarray[IDX(i,j+1)] - 2*yarray[IDX(i,j)] + yarray[IDX(i,j-1)]))/(dx*dx);
-
+		ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + udata->Erecv[NVARS*j])
+						 + cu2*(yarray[IDX(i,j-1)] + yarray[IDX(i,j+1)])
+						 + cu3*yarray[IDX(i,j)];
 	}
 	// South face: absorbing boundary at phi = 0, if js = 0 and time < TMAX, so that no backwards travelling waves occur
 	j=0;
-	yy = YMIN + (udata->js+j)*(dy);
 	if (udata->js == 0 && t<TMAX)
 	{
 		for (i=1; i<nxl-1; i++)
@@ -517,78 +466,59 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	{
 		for (i=1; i<nxl-1; i++)
 		{
-			xx = XMIN + (udata->is+i)*(dx);
-
-			ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - yarray[IDX(i-1,j)]) )/(2*dx)
-								+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
-								+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (yarray[IDX(i,j+1)] - 2*yarray[IDX(i,j)] + udata->Srecv[NVARS*i]))/(dx*dx);
+			ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + yarray[IDX(i+1,j)])
+							 + cu2*(udata->Srecv[NVARS*i]   + yarray[IDX(i,j+1)])
+							 + cu3*yarray[IDX(i,j)];
 		}
 	}
 	// North face
 	j=nyl-1;
-	yy = YMIN + (udata->js+j)*(dy);
 	for (i=1; i<nxl-1; i++)
 	{
-		xx = XMIN + (udata->is+i)*(dx);
-
-		ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - yarray[IDX(i-1,j)]) )/(2*dx)
-							+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
-							+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (udata->Nrecv[NVARS*i] - 2*yarray[IDX(i,j)] + yarray[IDX(i,j-1)]))/(dx*dx);
-
+		ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + yarray[IDX(i+1,j)])
+						 + cu2*(yarray[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
+						 + cu3*yarray[IDX(i,j)];
 	}
 	// South-West corner
 	i = 0;
 	j = 0;
-	xx = XMIN + (udata->is+i)*(dx);
-	yy = YMIN + (udata->js+j)*(dy);
-
 	if (udata->js == 0 && t<TMAX)
 	{
 		ydotarray[IDX(i,j)] = 0;
 	}
 	else
 	{
-		ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - udata->Wrecv[NVARS*j]) )/(2*dx)
-						+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + udata->Wrecv[NVARS*j]))/(dx*dx)
-						+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (yarray[IDX(i,j+1)] - 2*yarray[IDX(i,j)] + udata->Srecv[NVARS*i]))/(dx*dx);
+		ydotarray[IDX(i,j)] = cu1*(udata->Wrecv[NVARS*j] + yarray[IDX(i+1,j)])
+						   + cu2*(udata->Srecv[NVARS*i] + yarray[IDX(i,j+1)])
+						   + cu3*yarray[IDX(i,j)];
 	}
 	// North-West corner
 	i = 0;
 	j = nyl-1;
-	xx = XMIN + (udata->is+i)*(dx);
-	yy = YMIN + (udata->js+j)*(dy);
-
-	ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - udata->Wrecv[NVARS*j]) )/(2*dx)
-						+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + udata->Wrecv[NVARS*j]))/(dx*dx)
-						+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (udata->Nrecv[NVARS*i] - 2*yarray[IDX(i,j)] + yarray[IDX(i,j-1)]))/(dx*dx);
+	ydotarray[IDX(i,j)] = cu1*(udata->Wrecv[NVARS*j]   + yarray[IDX(i+1,j)])
+							   + cu2*(yarray[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
+							   + cu3*yarray[IDX(i,j)];
 
 	// South-East corner
 	i = nxl-1;
 	j = 0;
-	xx = XMIN + (udata->is+i)*(dx);
-	yy = YMIN + (udata->js+j)*(dy);
-
 	if (udata->js == 0 && t<TMAX)
 	{
 		ydotarray[IDX(i,j)] = 0;
 	}
 	else
 	{
-		ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(udata->Erecv[NVARS*j] - yarray[IDX(i-1,j)]) )/(2*dx)
-						+ Diff*( (1/(r*r))* (udata->Erecv[NVARS*j] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
-						+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (yarray[IDX(i,j+1)] - 2*yarray[IDX(i,j)] + udata->Srecv[NVARS*i]))/(dx*dx);
+		ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + udata->Erecv[NVARS*j])
+									   + cu2*(udata->Srecv[NVARS*i]   + yarray[IDX(i,j+1)])
+									   + cu3*yarray[IDX(i,j)];
 	}
 
 	// North-East corner
 	i = nxl-1;
 	j = nyl-1;
-	xx = XMIN + (udata->is+i)*(dx);
-	yy = YMIN + (udata->js+j)*(dy);
-
-	ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(udata->Erecv[NVARS*j] - yarray[IDX(i-1,j)]) )/(2*dx)
-						+ Diff*( (1/(r*r))* (udata->Erecv[NVARS*j] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
-						+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (udata->Nrecv[NVARS*i] - 2*yarray[IDX(i,j)] + yarray[IDX(i,j-1)]))/(dx*dx);
-
+	ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + udata->Erecv[NVARS*j])
+							   + cu2*(yarray[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
+							   + cu3*yarray[IDX(i,j)];
 
 	// Add other terms in equations
 	for (j=0; j<nyl; j++)
@@ -800,7 +730,7 @@ static int Exchange(N_Vector y, UserData *udata)
 	// Send data
 	for (i=0; i<nyl; i++)
 	{
-		udata->Wsend[2*i] = Y[IDX(nxl-1,i)];		// Fill data to send with Y values on West side
+		udata->Wsend[2*i] = Y[IDX(nxl-1,i)];
 		udata->Wsend[2*i + 1] = Y[IDX(nxl-1,i)+1];
 	}
 	ierr = MPI_Isend(udata->Wsend, NVARS*(udata->nyl), REALTYPE_MPI_TYPE, ipW, 0,
@@ -921,8 +851,6 @@ static int InitUserData(UserData *udata)
 	udata->Wsend = NULL;
 	udata->Nsend = NULL;
 	udata->Ssend = NULL;
-	udata->R = 0.0;
-	udata->r = 0.0;
 
 	return 0;     // return with success flag
 }
