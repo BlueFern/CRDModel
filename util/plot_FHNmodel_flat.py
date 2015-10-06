@@ -9,34 +9,36 @@ from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 import matplotlib.pyplot as plt
 import os
+from configobj import ConfigObj
 
-def plot_FHN(programArguments):
+def plot_FHNmodel_flat(programArguments):
     
     # Load relevant parameters from ini file
     conf = ConfigObj(programArguments)
     parameters = conf['Parameters']
     surfaceLength = parameters['majorCirc']
     beta = parameters['beta']
+    tFinal = parameters['tFinal']
     
     # determine the number of MPI processes used
     nprocs=1
     for i in range(1000):
-        sname = 'FHNmodel_subdomain.' + repr(i).zfill(3) + '.txt'
+        sname = 'FHNmodel_flat_subdomain.' + repr(i).zfill(3) + '.txt'
         try:
             f = open(sname,'r')
             f.close()
         except IOError:
             nprocs = i
             break
-    
+        
     # load subdomain information, store in table
     subdomains = np.zeros((nprocs,4), dtype=np.int)
     for i in range(nprocs):
         sname = 'FHNmodel_flat_subdomain.' + repr(i).zfill(3) + '.txt'
-        subd = np.loadtxt(sname, dtype=np.int)
-        if (i == 0):
-            nx = subd[0]
-            ny = subd[1]
+        subd = np.loadtxt(sname, dtype=np.float)
+        if i == 0:
+            nx = int(subd[0])
+            ny = int(subd[1])
         else:
             if ((subd[0] != nx) or (subd[1] != ny)):
                 sys.exit("error: subdomain files incompatible (clean up and re-run test)")
@@ -87,7 +89,8 @@ def plot_FHN(programArguments):
     
         # set string constants for output plots, current time, mesh size
         pname = 'FHNmodel_flat_surf_u.beta' + beta + '.' + repr(tstep).zfill(3) + '.png'
-        tstr  = repr(tstep)
+        time = ((float(tstep)/float(nt)))*float(tFinal) # get time of output
+        tstr = repr(float("{0:.1f}".format(time)))  # convert to string with 1 decimal place
         nxstr = repr(nx)
         nystr = repr(ny)
     
@@ -107,7 +110,7 @@ def plot_FHN(programArguments):
         plt.gca().invert_xaxis()
         plt.gca().invert_yaxis()
         ax.view_init(70,70)
-        title('Flat surface: u(x,y) at output ' + tstr + ', mesh = ' + nxstr + 'x' + nystr)
+        title('Flat surface: u(x,y) at time ' + tstr + ', mesh = ' + nxstr + 'x' + nystr)
         savefig(pname)
         plt.close()
     

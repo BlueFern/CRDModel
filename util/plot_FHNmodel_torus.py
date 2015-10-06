@@ -83,7 +83,8 @@ for tstep in range(nt):
 
     # set string constants for output plots, current time, mesh size
     pname = 'FHNmodel_torus_surf_u.' + repr(tstep).zfill(3) + '.png'
-    tstr  = repr(tstep)
+    time = ((float(tstep)/float(nt)))*float(tFinal) # get time of output
+    tstr = repr(float("{0:.1f}".format(time)))  # convert to string with 1 decimal place
     nxstr = repr(nx)
     nystr = repr(ny)
 
