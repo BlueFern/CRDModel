@@ -63,7 +63,6 @@ using namespace std;
 #define PI RCONST(3.1415926535897932)
 #define ONE RCONST(1.0)
 #define TWO RCONST(2.0)
-#define THREE RCONST(3.0)
 #define MINORCIRC RCONST(20.0) 	// Minor circumference of the torus
 
 // System parameters
@@ -237,8 +236,8 @@ int main(int argc, char* argv[])
 		cout << "   Output timesteps = " << OUTPUT_TIMESTEP << "\n";
 		cout << "   Major circumference = " << MAJORCIRC << "\n";
 		cout << "   Absorbing boundary turn off time = " << TMAX << "\n";
-		cout << "   Wavelength = " << WAVELENGTH << "\%\n";
-		cout << "   Wavewidth = " << WAVEWIDTH << "\%\n";
+		cout << "   Wavelength = " << WAVELENGTH*100 << "\%\n";
+		cout << "   Wavewidth = " << WAVEWIDTH*100 << "\%\n";
 		cout << "   Wave inside = " << WAVEINSIDE << "\n";
 		cout << "   rtol = " << rtol << "\n";
 		cout << "   atol = " << atol << "\n";
@@ -282,7 +281,7 @@ int main(int argc, char* argv[])
 			if (WaveInside == 1)
 			{
 				// Set initial wave segment
-				if ( xx>WaveXMIN && xx<WaveXMAX && yy>WaveLength && yy<(2.0*WaveLength) )
+				if ( xx >= WaveXMIN && xx <= WaveXMAX && yy >= WaveLength && yy <= (2.0*WaveLength) )
 				{
 					// Set perturbed wave segment to higher initial values
 					ydata[IDX(i,j)] = RCONST(-BETA+2);									// u
@@ -299,7 +298,7 @@ int main(int argc, char* argv[])
 			else if (WaveInside == 0)
 			{
 				// Set initial wave segment
-				if ( (xx>WaveXMIN || xx<WaveXMAX) && yy>WaveLength && yy<(2.0*WaveLength) )
+				if ( (xx >= WaveXMIN || xx <= WaveXMAX) && yy >= WaveLength && yy <= (2.0*WaveLength) )
 				{
 					// Set perturbed wave segment to higher initial values
 					ydata[IDX(i,j)] = RCONST(-BETA+2);									// u

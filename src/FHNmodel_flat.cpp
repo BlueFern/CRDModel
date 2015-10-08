@@ -259,7 +259,7 @@ int main(int argc, char* argv[])
 			xx = XMIN + (udata->is+i)*(udata->dx);					// Actual x values
 
 				// Set initial wave segment
-				if ( xx>WaveXMIN && xx<WaveXMAX && yy>WaveLength && yy<(2.0*WaveLength) )
+				if ( xx >= WaveXMIN && xx <= WaveXMAX && yy >= WaveLength && yy <= (2.0*WaveLength) )
 				{
 					// Set perturbed wave segment to higher initial values
 					ydata[IDX(i,j)] = RCONST(-BETA+2);									// u
@@ -426,7 +426,6 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	long int i, j;
 	for (j=1; j<nyl-1; j++)
 	{
-		yy = YMIN + (udata->js+j)*(dy);
 		for (i=1; i<nxl-1; i++)
 		{
 			// Fill in diffusion for u variable
@@ -523,12 +522,8 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	// Add other terms in equations
 	for (j=0; j<nyl; j++)
 	{
-		yy = YMIN + (udata->js+j)*(dy); 					// Actual y values
-
 		for (i=0; i<nxl; i++)
 		{
-			xx = XMIN + (udata->is+i)*(dx);					// Actual x values
-
 			realtype u = yarray[IDX(i,j)];
 			realtype v = yarray[IDX(i,j)+1];
 
