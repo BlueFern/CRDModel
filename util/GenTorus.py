@@ -25,7 +25,8 @@ def GenTorus(programArguments):
     torusSource.SetSize(float(majorCirc)/(2*np.pi)+20/(2*np.pi))      
     torusSource.SetThickness (20/float(majorCirc))    
     torusSource.SetThetaResolution(thetaResolution*(float(majorCirc)/20))
-     
+    #torusSource.SetThetaResolution(thetaResolution)
+    
     tri = vtk.vtkTriangleFilter()
     tri.SetInputConnection(torusSource.GetOutputPort())
      
@@ -38,6 +39,7 @@ def GenTorus(programArguments):
     
     cleaner.Update()
     
+    #outputFileName = "torus_R" + majorCirc + "_tmesh" + thetaMesh + "_pmesh" + thetaMesh + ".vtp"
     outputFileName = "torus_R" + majorCirc + "_mesh" + thetaMesh + ".vtp"
     print "Saving output to file", outputFileName 
     

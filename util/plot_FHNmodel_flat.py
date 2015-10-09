@@ -116,7 +116,7 @@ def plot_FHNmodel_flat(programArguments):
     
     
     os.system("convert -delay 20 -loop 0 FHNmodel_flat_surf_u.beta*.png " + "FHNmodel_flat_surf_u.beta" + beta + ".gif")
-    #os.system("rm FHNmodel_surf_u.*.png") # clean up files
+    os.system("rm FHNmodel_flat_surf_u.*.png") # clean up files
     os.system("animate FHNmodel_flat_surf_u.beta" + beta + ".gif") # play animates gif
 
 if __name__ == '__main__':

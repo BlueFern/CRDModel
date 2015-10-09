@@ -23,7 +23,7 @@ def XYZtoRC(xyz,ny,nx,r,R):
         theta = (np.pi -  np.arcsin(y/r)) % (2*np.pi)
 
     # Finds the row and column of the results array that match the given coords
-    # using the number of rows (ny), number of columns (nx)
+    # using the number of rows (ny) and number of columns (nx)
     rc = (int(phi/(2*np.pi)*(ny-1)), int(theta/(2*np.pi)*(nx-1)) )
 
     return rc
@@ -120,6 +120,7 @@ def MapOutputToTorus(programArguments):
         
         # Read geometry from disk
         torusReader = vtk.vtkXMLPolyDataReader()
+        #torusReader.SetFileName("torus_R" + majorCirc + "_tmesh" + thetaMesh + "_pmesh" + thetaMesh + ".vtp")
         torusReader.SetFileName("torus_R" + majorCirc + "_mesh" + thetaMesh + ".vtp")
         torusReader.Update()
         

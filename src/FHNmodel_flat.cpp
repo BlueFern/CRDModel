@@ -83,7 +83,7 @@ double WAVELENGTH = 0.0;			// Initial wave segment length as a percentage of tot
 double WAVEWIDTH = 0.0;				// Initial wave segment width as a percentage of total width of torus (theta)
 int WAVEINSIDE =  0;				// Bool/int for whether the initial wave is centered on the inside of the torus (true=1) or outside (false=0)
 int OUTPUT_TIMESTEP = 0; 			// Number of timesteps to output to file
-double TMAX = 0.0;					// Time to turn off the absorbing boundary at phi = 0 (to eliminate backwards travelling waves) - set to 0 for no absorbing boundary
+double TBOUNDARY = 0.0;					// Time to turn off the absorbing boundary at phi = 0 (to eliminate backwards travelling waves) - set to 0 for no absorbing boundary
 double TFINAL = 0.0;				// Time to run simulation
 int NX = 0;						// Mesh size in theta direction
 int INCLUDEALLVARS = 0;				// Bool/int for whether we write all variables to file (true=1) or only the main activator variable u (false=0)
@@ -155,7 +155,7 @@ int main(int argc, char* argv[])
 	WAVELENGTH = pt.get<double>("Parameters.waveLength");
 	WAVEWIDTH = pt.get<double>("Parameters.waveWidth");
 	OUTPUT_TIMESTEP = pt.get<int>("Parameters.outputTimestep");
-	TMAX = pt.get<double>("Parameters.tMax");
+	TBOUNDARY = pt.get<double>("Parameters.tBoundary");
 	TFINAL = pt.get<double>("Parameters.tFinal");
 	NX = pt.get<int>("Parameters.thetaMesh");				// This is the mesh of the X direction
 	INCLUDEALLVARS = pt.get<int>("System.includeAllVars");
@@ -230,7 +230,7 @@ int main(int argc, char* argv[])
 		cout << "   Tfinal = " << TFINAL << "\n";
 		cout << "   Output timesteps = " << OUTPUT_TIMESTEP << "\n";
 		cout << "   Surface length = " << SURFACELENGTH << "\n";
-		cout << "   Absorbing boundary turn off time = " << TMAX << "\n";
+		cout << "   Absorbing boundary turn off time = " << TBOUNDARY << "\n";
 		cout << "   Wavelength = " << WAVELENGTH << "\%\n";
 		cout << "   Wavewidth = " << WAVEWIDTH << "\%\n";
 		cout << "   rtol = " << rtol << "\n";
@@ -452,9 +452,9 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 						 + cu2*(yarray[IDX(i,j-1)] + yarray[IDX(i,j+1)])
 						 + cu3*yarray[IDX(i,j)];
 	}
-	// South face: absorbing boundary at phi = 0, if js = 0 and time < TMAX, so that no backwards travelling waves occur
+	// South face: absorbing boundary at phi = 0, if js = 0 and time < TBOUNDARY, so that no backwards travelling waves occur
 	j=0;
-	if (udata->js == 0 && t<TMAX)
+	if (udata->js == 0 && t<TBOUNDARY)
 	{
 		for (i=1; i<nxl-1; i++)
 		{
@@ -481,7 +481,7 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	// South-West corner
 	i = 0;
 	j = 0;
-	if (udata->js == 0 && t<TMAX)
+	if (udata->js == 0 && t<TBOUNDARY)
 	{
 		ydotarray[IDX(i,j)] = 0;
 	}
@@ -501,7 +501,7 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	// South-East corner
 	i = nxl-1;
 	j = 0;
-	if (udata->js == 0 && t<TMAX)
+	if (udata->js == 0 && t<TBOUNDARY)
 	{
 		ydotarray[IDX(i,j)] = 0;
 	}
