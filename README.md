@@ -21,5 +21,31 @@ the build directory.
 How to Run
 ----------
 
-To do.....
+Modify the model parameters with the file ProgArgs.ini found in /data or supply your own. This file is included as a command line argument when running most scripts.
 
+
+To run: 
+
+    mpirun -np <<number of processes>> <<C program>> <<ini file>>
+
+where C program is either FHNmodel_flat or FHNmodel_torus, depending on the surface needed. This outputs (Number of Variables)*(Number of processes) text files, where each text file corresponds to one variable in one subdomain. The rows correspond to each time step and the columns correspond to their grid point in the subdomain.
+
+
+To plot as a 3D surface plot: 
+
+    python <<plotting script>>  
+
+where plotting script is either plot_FHNmodel_flat.py or plot_FHNmodel_torus.py, found in /util. This outputs a .png file for every timestep and combines them into .gif format.
+
+
+To plot solutions on a torus, first generate a torus with the appropriate mesh size:
+
+    python <<script>> <<ini file>>
+
+where script is GenTorus.py, found in /util. This outputs a .vtp file for use by MapOutputToTorus.py. This step can be omitted once the appropriate torus is generated.
+
+Next map the output of FHNmodel_torus to the generated torus: 
+
+    python <<script>> <<ini file>>
+     
+where script is MapOutputToTorus.py, found in /util. This outputs multiple .vtp files called step_*.vtp where each file corresponds to a timestep. These files can be opened in Paraview.
