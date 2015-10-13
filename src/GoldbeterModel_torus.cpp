@@ -1,12 +1,12 @@
-/* Fitz Hugh Nagumo neuron model with periodic BCs on a 2D torus. ICs: stable state everywhere apart from
+/* Goldbeter SMC model with periodic BCs on a 2D torus. ICs: stable state everywhere apart from
  * a small rectangle centred on either the outside (theta=0) or inside (theta=pi) of the torus.
  *
  * The model equations are:
  *
- * u' = 3u - u^3 - v + D*Laplacian(u)
- * v' = epsilon*(u - beta)
+ * Z' = v0 + v1*BETA - v2 + v3 + kf*Y - k*Z + D*Laplacian(Z)
+ * Y' = v2 + v3 + kf*Y
  *
- * where u is the activator variable, v is the inhibitor variable.
+ * where Z is the calcium concentration in the SMC cytosol, Y is the calcium concentration in the SMC stores.
  *
 
        /-/--\
@@ -64,12 +64,23 @@ using namespace std;
 #define ONE RCONST(1.0)
 #define TWO RCONST(2.0)
 #define MINORCIRC RCONST(20.0) 	// Minor circumference of the torus
-#define BETA_MIN 0.7
-#define BETA_MAX 1.7
 
 // System parameters
-#define EPSILON 0.36			// Time scale separation of the two variables
-#define DIFF 0.12				// Diffusion coefficient
+#define v0 1.0
+#define k 10.0
+#define kf 1.0
+#define v1 7.3
+#define VM2 65.0
+#define VM3 500.0
+#define K2 1.0
+#define KR 2.0
+#define KA 0.9
+#define m 2.0
+#define n 2.0
+#define p 4.0
+
+// Diffusion coefficient
+#define DIFF 0.12
 
 // Number of variables in the system
 #define NVARS 2
@@ -81,7 +92,7 @@ using namespace std;
 
 
 // Initialise parameters, found in ini file
-double BETA = 0.0;					// Bifurcation parameter - system is oscillatory for BETA < 1, stable for BETA > 1
+double BETA = 0.0;					// Bifurcation parameter - system is oscillatory for 0.28895 < BETA < 0.77427
 double MAJORCIRC = 0.0;	 			// Major circumference of the torus - use 80.0 for normal, 40.0 for more curved surface
 double WAVELENGTH = 0.0;			// Initial wave segment length as a percentage of total length of torus (phi)
 double WAVEWIDTH = 0.0;				// Initial wave segment width as a percentage of total width of torus (theta)
@@ -91,7 +102,6 @@ double TBOUNDARY = 0.0;				// Time to turn off the absorbing boundary at phi = 0
 double TFINAL = 0.0;				// Time to run simulation
 int NX = 0;							// Mesh size in theta direction
 int INCLUDEALLVARS = 0;				// Bool/int for whether we write all variables to file (true=1) or only the main activator variable u (false=0)
-int VARYBETA = 0;					// Bool/int for whether BETA is varied over the torus surface (true=1) or kept constant (false=0)
 
 // user data structure
 typedef struct {
@@ -167,7 +177,6 @@ int main(int argc, char* argv[])
 	TFINAL = pt.get<double>("Parameters.tFinal");
 	NX = pt.get<int>("Parameters.thetaMesh");
 	INCLUDEALLVARS = pt.get<int>("System.includeAllVars");
-	VARYBETA = pt.get<int>("System.varyBeta");
 
 	// general problem parameters
 	realtype T0 = RCONST(0.0);   		// initial time
@@ -224,25 +233,26 @@ int main(int argc, char* argv[])
 	flag = SetupDecomp(udata);
 	if (check_flag(&flag, "SetupDecomp", 1)) return 1;
 
+	// Find stable state of ODE model dependent on beta:
+	// Run python script to solve the ODE problem
+	std::string command = "SolveGoldbeterODE.py " + pt.get<std::string>("Parameters.beta");
+
+	FILE* in = popen(command.c_str(), "r");
+	double Zs, Ys;
+	// Import the last two values of the solution as the stable state of the model
+	int error = fscanf(in, "[%lf] [%lf]", &Zs, &Ys);
+
 	// Initial problem output
 	bool outproc = (udata->rank == 0);
 	if (outproc) {
-		cout << "\n2D FHN model PDE problem on a torus:\n";
+		cout << "\n2D Goldbeter model PDE problem on a torus:\n";
 		cout << "   nprocs = " << udata->nprocs << "\n";
 		cout << "   nx = " << udata->nx << "\n";
 		cout << "   ny = " << udata->ny << "\n";
 		cout << "   nxl = " << udata->nxl << "\n";
 		cout << "   nyl = " << udata->nyl << "\n";
 		cout << "   Diff = " << udata->Diff << "\n";
-
-		if (VARYBETA == 0)
-		{
-			cout << "   Beta = " << BETA << "\n";
-		}
-		else
-		{
-			cout << "   Beta varied over torus\n";
-		}
+		cout << "   Beta = " << BETA << "\n";
 		cout << "   Tfinal = " << TFINAL << "\n";
 		cout << "   Output timesteps = " << OUTPUT_TIMESTEP << "\n";
 		cout << "   Major circumference = " << MAJORCIRC << "\n";
@@ -253,6 +263,7 @@ int main(int argc, char* argv[])
 		cout << "   rtol = " << rtol << "\n";
 		cout << "   atol = " << atol << "\n";
 		cout << "   Include all variables in output = " << INCLUDEALLVARS << "\n";
+		cout << "   Stable state values: Z = " << Zs << ", Y = " << Ys << "\n\n";
 	}
 
 	// Initialize data structures
@@ -285,18 +296,6 @@ int main(int argc, char* argv[])
 	{
 		yy = YMIN + (udata->js+j)*(udata->dy);						// Actual x values
 
-		// BETA varied over the torus
-		realtype BETA_y =  BETA_MIN + yy*(BETA_MAX-BETA_MIN)/(YMAX-YMIN);
-		realtype B;
-		if (VARYBETA == 1)
-		{
-			B = BETA_y;
-		}
-		else
-		{
-			B = BETA;
-		}
-
 		for (i=0; i<udata->nxl; i++)
 		{
 			xx = XMIN + (udata->is+i)*(udata->dx);					// Actual x values
@@ -306,14 +305,14 @@ int main(int argc, char* argv[])
 				// Set initial wave segment
 				if ( xx >= WaveXMIN && xx <= WaveXMAX && yy >= WaveLength && yy <= (2.0*WaveLength) )
 				{
-					ydata[IDX(i,j)] = RCONST(-B+2);									// u
-					ydata[IDX(i,j) + 1] = RCONST(B*B*B - 3*B + 1.5);				// v
+					ydata[IDX(i,j)] = Zs + 1;
+					ydata[IDX(i,j) + 1] = Ys + 0.5;
 				}
 				else
 				{
-					// Set rest of area to stable u,v
-					ydata[IDX(i,j)] = RCONST(-B);									// u
-					ydata[IDX(i,j) + 1] = RCONST(B*B*B - 3*B);						// v
+					// Set rest of area to stable
+					ydata[IDX(i,j)] = Zs;
+					ydata[IDX(i,j) + 1] = Ys;
 
 				}
 			}
@@ -322,14 +321,14 @@ int main(int argc, char* argv[])
 				// Set initial wave segment
 				if ( (xx >= WaveXMIN || xx <= WaveXMAX) && yy >= WaveLength && yy <= (2.0*WaveLength) )
 				{
-					ydata[IDX(i,j)] = RCONST(-B+2);									// u
-					ydata[IDX(i,j) + 1] = RCONST(B*B*B - 3*B + 1.5);						// v
+					ydata[IDX(i,j)] = Zs + 1;
+					ydata[IDX(i,j) + 1] = Ys + 0.5;
 				}
 				else
 				{
-					// Set rest of area to stable u,v
-					ydata[IDX(i,j)] = RCONST(-B);									// u
-					ydata[IDX(i,j) + 1] = RCONST(B*B*B - 3*B);						// v
+					// Set rest of area to stable
+					ydata[IDX(i,j)] = Zs;
+					ydata[IDX(i,j) + 1] = Ys;
 
 				}
 			}
@@ -357,7 +356,7 @@ int main(int argc, char* argv[])
 
 	// Each processor outputs subdomain information
 	char outname[100];
-	sprintf(outname, "FHNmodel_torus_subdomain.%03i.txt", udata->rank);
+	sprintf(outname, "GoldbeterModel_torus_subdomain.%03i.txt", udata->rank);
 	FILE *UFID = fopen(outname,"w");
 	fprintf(UFID, "%li  %li  %li  %li  %li  %li %f %f %f\n",
 			udata->nx, udata->ny, udata->is, udata->ie, udata->js, udata->je, XMIN, XMAX, TFINAL);
@@ -365,10 +364,10 @@ int main(int argc, char* argv[])
 
 	ydata = N_VGetArrayPointer(y);
 
-	sprintf(outname, "FHNmodel_torus_u.%03i.txt", udata->rank);
+	sprintf(outname, "GoldbeterModel_torus_Z.%03i.txt", udata->rank);
 	UFID = fopen(outname, "w");
 
-	sprintf(outname, "FHNmodel_torus_v.%03i.txt", udata->rank);
+	sprintf(outname, "GoldbeterModel_torus_Y.%03i.txt", udata->rank);
 	FILE *UFID2 = fopen(outname, "w");
 
 
@@ -482,13 +481,14 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	int ierr = Exchange(y, udata);
 	if (check_flag(&ierr, "Exchange", 1)) return -1;
 
-	// iterate over subdomain interior, computing approximation to RHS
+	// Add diffusion term
+
 	long int i, j;
 	for (j=1; j<nyl-1; j++)
 	{
 		for (i=1; i<nxl-1; i++)
 		{
-			// Fill in diffusion for u variable
+			// Fill in diffusion for Z variable
 			xx = XMIN + (udata->is+i)*(dx);
 
 			// Note that diffusion is different depending on the coordinate system - this is for a torus
@@ -601,28 +601,22 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	{
 		yy = YMIN + (udata->js+j)*(udata->dy);
 
-		// Calculate BETA based on the position on the torus
-		realtype BETA_y =  BETA_MIN + yy*(BETA_MAX-BETA_MIN)/(YMAX-YMIN);
-
 		for (i=0; i<nxl; i++)
 		{
 			xx = XMIN + (udata->is+i)*(udata->dx);
 
-			realtype u = yarray[IDX(i,j)];
-			realtype v = yarray[IDX(i,j)+1];
+			realtype Z = yarray[IDX(i,j)];
+			realtype Y = yarray[IDX(i,j)+1];
 
-			// u variable: du/dt = 3u - u^3 - v + Diff
-			ydotarray[IDX(i,j)] += 3.0*u - (u*u*u) - v;
+			// Algebraic equations
+			realtype v2 = VM2 * pow(Z,n) / ( pow(K2,n) + pow(Z,n) );
+			realtype v3 = VM3 * pow(Y,m) * pow(Z,p) / ( (pow(KR,m) + pow(Y,m)) * (pow(KA,p) + pow(Z,p)) );
 
-			// v variable: dv/dt = eps(u + beta)
-			if (VARYBETA == 1)
-			{
-				ydotarray[IDX(i,j)+1] += EPSILON*(u + BETA_y);
-			}
-			else
-			{
-				ydotarray[IDX(i,j)+1] += EPSILON*(u + BETA);
-			}
+			// Z
+			ydotarray[IDX(i,j)] += v0 + v1*BETA - v2 + v3 + kf*Y - k*Z;
+
+			// Y
+			ydotarray[IDX(i,j)+1] += v2 - v3 - kf*Y;
 		}
 	}
 

@@ -161,7 +161,7 @@ int main(int argc, char* argv[])
 	INCLUDEALLVARS = pt.get<int>("System.includeAllVars");
 
 	XMIN = 0.0;				                // grid boundaries in theta
-	XMAX =  SURFACEWIDTH - XMIN;
+	XMAX = SURFACEWIDTH - XMIN;
 	YMIN = 0.0;			    	    		// grid boundaries in phi
 	YMAX = SURFACELENGTH - YMIN;
 

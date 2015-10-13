@@ -3,7 +3,10 @@
 # imports
 import vtk
 import sys
+import lxml
+import lxml.etree
 import numpy as np
+import argparse
 import math
 from configobj import ConfigObj
 
@@ -29,15 +32,20 @@ def XYZtoRC(xyz,ny,nx,r,R):
     return rc
     
 
-def MapOutputToTorus(programArguments):
-    ''' programArguments: ini file containing model parameters'''
-    
+if __name__ == '__main__':
+
+    # Obtain ini file
+    parser = argparse.ArgumentParser()
+    parser.add_argument("configFile", help="config file path")
+    args = parser.parse_args()
+
     # Load relevant parameters from ini file
-    conf = ConfigObj(programArguments)
+    conf = ConfigObj(args.configFile)
     parameters = conf['Parameters']
     systemParameters = conf['System']
     majorCirc = parameters['majorCirc']
     thetaMesh = parameters['thetaMesh']
+    tFinal = parameters['tFinal']
     includeAllVars = systemParameters['includeAllVars']
 
     # Minor radius of torus
@@ -115,8 +123,13 @@ def MapOutputToTorus(programArguments):
             for i in range(nt):
                 resultsU[i,jstart:jend+1,istart:iend+1] = np.reshape(dataU[i,:], (nyl,nxl))
                 if (includeAllVars == 1): resultsV[i,jstart:jend+1,istart:iend+1] = np.reshape(dataV[i,:], (nyl,nxl))
-                
+
+    tStepDict = dict()
+
     for tstep in range(nt):
+        
+        # Get the time at tstep
+        time = ((float(tstep)/float(nt)))*float(tFinal) # get time of output
         
         # Read geometry from disk
         torusReader = vtk.vtkXMLPolyDataReader()
@@ -154,16 +167,33 @@ def MapOutputToTorus(programArguments):
         
         torus.GetCellData().SetScalars(activatorArray)  # default variable
         if (includeAllVars == 1): torus.GetCellData().AddArray(inhibitorArray)    # other variable(s)
-        
-        outputFileName = "step_" + repr(tstep).zfill(3) + ".vtp"
+
+
+        outputFileName = "FHNstep_" + repr(tstep).zfill(3) + ".vtp"
+
+        tStepDict[time] = outputFileName
         
         writer = vtk.vtkXMLPolyDataWriter()
         writer.SetInput(torus)
         writer.SetFileName(outputFileName)
         writer.Update()
 
-if __name__ == '__main__':
-    if len(sys.argv) != 2:
-        print "Usage: " + sys.argv[0] + " <Program Arguments>"
-    else:
-        MapOutputToTorus(sys.argv[1])
+    # Create new root of the XML tree.
+    vtkFileElem = lxml.etree.Element('VTKFile', type="Collection", version='0.1', byte_order='LittleEndian', compressor='vtkZLibDataCompressor')
+
+    # Create new XML document.
+    pvdDoc = lxml.etree.ElementTree(vtkFileElem)
+
+    # Add 'Collections' element, as a subelement of the 'VTKFile'.
+    collectionElem = lxml.etree.SubElement(vtkFileElem, 'Collection')
+
+    for time in tStepDict:
+        tstr = repr(float("{0:.1f}".format(time)))  # convert to string with 1 decimal place
+        # Add 'DataSet' element as a subelement of ... whatever.
+        dataElem = lxml.etree.SubElement(collectionElem, 'DataSet', timestep=tstr, group='', part='0', file=tStepDict[time])
+
+    # Print the tree to the console.
+    outXMLFile = open('FHNtimeSteps.pvd', 'w')
+    pvdDoc.write(outXMLFile, encoding='iso-8859-1', xml_declaration=True, pretty_print=True, method = 'xml')
+
+

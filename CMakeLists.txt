@@ -20,6 +20,8 @@ include_directories(${MPI_CXX_INCLUDE_PATH})
 SET(Targets
   FHNmodel_flat
   FHNmodel_torus
+  GoldbeterModel_torus
+  GoldbeterModel_flat
   )
 
 # Check whether we use MPI compiler scripts.
