@@ -306,7 +306,7 @@ int main(int argc, char* argv[])
 				if ( xx >= WaveXMIN && xx <= WaveXMAX && yy >= WaveLength && yy <= (2.0*WaveLength) )
 				{
 					ydata[IDX(i,j)] = Zs + 1;
-					ydata[IDX(i,j) + 1] = Ys + 0.5;
+					ydata[IDX(i,j) + 1] = Ys + 1;
 				}
 				else
 				{
@@ -322,7 +322,7 @@ int main(int argc, char* argv[])
 				if ( (xx >= WaveXMIN || xx <= WaveXMAX) && yy >= WaveLength && yy <= (2.0*WaveLength) )
 				{
 					ydata[IDX(i,j)] = Zs + 1;
-					ydata[IDX(i,j) + 1] = Ys + 0.5;
+					ydata[IDX(i,j) + 1] = Ys + 1;
 				}
 				else
 				{

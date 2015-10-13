@@ -91,7 +91,6 @@ double TBOUNDARY = 0.0;				// Time to turn off the absorbing boundary at phi = 0
 double TFINAL = 0.0;				// Time to run simulation
 int NX = 0;							// Mesh size in theta direction
 int INCLUDEALLVARS = 0;				// Bool/int for whether we write all variables to file (true=1) or only the main activator variable u (false=0)
-int VARYBETA = 0;					// Bool/int for whether BETA is varied over the torus surface (true=1) or kept constant (false=0)
 
 // user data structure
 typedef struct {
@@ -167,7 +166,6 @@ int main(int argc, char* argv[])
 	TFINAL = pt.get<double>("Parameters.tFinal");
 	NX = pt.get<int>("Parameters.thetaMesh");
 	INCLUDEALLVARS = pt.get<int>("System.includeAllVars");
-	VARYBETA = pt.get<int>("System.varyBeta");
 
 	// general problem parameters
 	realtype T0 = RCONST(0.0);   		// initial time
@@ -234,15 +232,7 @@ int main(int argc, char* argv[])
 		cout << "   nxl = " << udata->nxl << "\n";
 		cout << "   nyl = " << udata->nyl << "\n";
 		cout << "   Diff = " << udata->Diff << "\n";
-
-		if (VARYBETA == 0)
-		{
-			cout << "   Beta = " << BETA << "\n";
-		}
-		else
-		{
-			cout << "   Beta varied over torus\n";
-		}
+		cout << "   Beta = " << BETA << "\n";
 		cout << "   Tfinal = " << TFINAL << "\n";
 		cout << "   Output timesteps = " << OUTPUT_TIMESTEP << "\n";
 		cout << "   Major circumference = " << MAJORCIRC << "\n";
@@ -285,18 +275,6 @@ int main(int argc, char* argv[])
 	{
 		yy = YMIN + (udata->js+j)*(udata->dy);						// Actual x values
 
-		// BETA varied over the torus
-		realtype BETA_y =  BETA_MIN + yy*(BETA_MAX-BETA_MIN)/(YMAX-YMIN);
-		realtype B;
-		if (VARYBETA == 1)
-		{
-			B = BETA_y;
-		}
-		else
-		{
-			B = BETA;
-		}
-
 		for (i=0; i<udata->nxl; i++)
 		{
 			xx = XMIN + (udata->is+i)*(udata->dx);					// Actual x values
@@ -306,14 +284,14 @@ int main(int argc, char* argv[])
 				// Set initial wave segment
 				if ( xx >= WaveXMIN && xx <= WaveXMAX && yy >= WaveLength && yy <= (2.0*WaveLength) )
 				{
-					ydata[IDX(i,j)] = RCONST(-B+2);									// u
-					ydata[IDX(i,j) + 1] = RCONST(B*B*B - 3*B + 1.5);				// v
+					ydata[IDX(i,j)] = RCONST(-BETA+2);									// u
+					ydata[IDX(i,j) + 1] = RCONST(BETA*BETA*BETA - 3*BETA + 1.5);		// v
 				}
 				else
 				{
 					// Set rest of area to stable u,v
-					ydata[IDX(i,j)] = RCONST(-B);									// u
-					ydata[IDX(i,j) + 1] = RCONST(B*B*B - 3*B);						// v
+					ydata[IDX(i,j)] = RCONST(-BETA);									// u
+					ydata[IDX(i,j) + 1] = RCONST(BETA*BETA*BETA - 3*BETA);				// v
 
 				}
 			}
@@ -322,14 +300,14 @@ int main(int argc, char* argv[])
 				// Set initial wave segment
 				if ( (xx >= WaveXMIN || xx <= WaveXMAX) && yy >= WaveLength && yy <= (2.0*WaveLength) )
 				{
-					ydata[IDX(i,j)] = RCONST(-B+2);									// u
-					ydata[IDX(i,j) + 1] = RCONST(B*B*B - 3*B + 1.5);						// v
+					ydata[IDX(i,j)] = RCONST(-BETA+2);									// u
+					ydata[IDX(i,j) + 1] = RCONST(BETA*BETA*BETA - 3*BETA + 1.5);		// v
 				}
 				else
 				{
 					// Set rest of area to stable u,v
-					ydata[IDX(i,j)] = RCONST(-B);									// u
-					ydata[IDX(i,j) + 1] = RCONST(B*B*B - 3*B);						// v
+					ydata[IDX(i,j)] = RCONST(-BETA);									// u
+					ydata[IDX(i,j) + 1] = RCONST(BETA*BETA*BETA - 3*BETA);				// v
 
 				}
 			}
@@ -615,14 +593,7 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 			ydotarray[IDX(i,j)] += 3.0*u - (u*u*u) - v;
 
 			// v variable: dv/dt = eps(u + beta)
-			if (VARYBETA == 1)
-			{
-				ydotarray[IDX(i,j)+1] += EPSILON*(u + BETA_y);
-			}
-			else
-			{
-				ydotarray[IDX(i,j)+1] += EPSILON*(u + BETA);
-			}
+			ydotarray[IDX(i,j)+1] += EPSILON*(u + BETA);
 		}
 	}
 
