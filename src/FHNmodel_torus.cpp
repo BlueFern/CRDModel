@@ -222,6 +222,12 @@ int main(int argc, char* argv[])
 	flag = SetupDecomp(udata);
 	if (check_flag(&flag, "SetupDecomp", 1)) return 1;
 
+	// Find stable state of ODE model dependent on beta
+	// The model is simple so the solution can be found analytically:
+	double Us, Vs;	// Stable states of U, V respectively
+	Us = -BETA;
+	Vs = BETA*BETA*BETA - 3*BETA;
+
 	// Initial problem output
 	bool outproc = (udata->rank == 0);
 	if (outproc) {
@@ -284,15 +290,14 @@ int main(int argc, char* argv[])
 				// Set initial wave segment
 				if ( xx >= WaveXMIN && xx <= WaveXMAX && yy >= WaveLength && yy <= (2.0*WaveLength) )
 				{
-					ydata[IDX(i,j)] = RCONST(-BETA+2);									// u
-					ydata[IDX(i,j) + 1] = RCONST(BETA*BETA*BETA - 3*BETA + 1.5);		// v
+					ydata[IDX(i,j)] = Us + 2;
+					ydata[IDX(i,j) + 1] = Vs + 1.5;
 				}
 				else
 				{
 					// Set rest of area to stable u,v
-					ydata[IDX(i,j)] = RCONST(-BETA);									// u
-					ydata[IDX(i,j) + 1] = RCONST(BETA*BETA*BETA - 3*BETA);				// v
-
+					ydata[IDX(i,j)] = Us;
+					ydata[IDX(i,j) + 1] = Vs;
 				}
 			}
 			else if (WaveInside == 0)
@@ -300,14 +305,14 @@ int main(int argc, char* argv[])
 				// Set initial wave segment
 				if ( (xx >= WaveXMIN || xx <= WaveXMAX) && yy >= WaveLength && yy <= (2.0*WaveLength) )
 				{
-					ydata[IDX(i,j)] = RCONST(-BETA+2);									// u
-					ydata[IDX(i,j) + 1] = RCONST(BETA*BETA*BETA - 3*BETA + 1.5);		// v
+					ydata[IDX(i,j)] = Us + 2;
+					ydata[IDX(i,j) + 1] = Vs + 1.5;
 				}
 				else
 				{
 					// Set rest of area to stable u,v
-					ydata[IDX(i,j)] = RCONST(-BETA);									// u
-					ydata[IDX(i,j) + 1] = RCONST(BETA*BETA*BETA - 3*BETA);				// v
+					ydata[IDX(i,j)] = Us;
+					ydata[IDX(i,j) + 1] = Vs;
 
 				}
 			}
