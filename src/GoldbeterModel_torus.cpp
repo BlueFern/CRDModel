@@ -435,8 +435,18 @@ int main(int argc, char* argv[])
 		{
 		fprintf(UFID2,"\n");
 		}
+
+		if (outproc)
+		{
+			if (iout > 0)
+			{
+				printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
+			}
+			printf("   %3d /%3d done", iout+1, Nt);
+			fflush(stdout);
+		}
 	}
-	if (outproc)  cout << "   ----------------------\n";
+	if (outproc)  cout << "\n   ----------------------\n";
 	fclose(UFID);
 
 	if (INCLUDEALLVARS == 1)

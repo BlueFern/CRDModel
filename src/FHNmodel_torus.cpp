@@ -249,6 +249,7 @@ int main(int argc, char* argv[])
 		cout << "   rtol = " << rtol << "\n";
 		cout << "   atol = " << atol << "\n";
 		cout << "   Include all variables in output = " << INCLUDEALLVARS << "\n";
+		cout << "   Stable state values: U = " << Us << ", V = " << Vs << "\n\n";
 	}
 
 	// Initialize data structures
@@ -276,7 +277,7 @@ int main(int argc, char* argv[])
 	}
 
 	// Set initial conditions - these are model dependent.
-	ydata = N_VGetArrayPointer(y);
+	ydata = N_VGetArrayPointer(y);http://www.gnu.org/software/libc/manual/html_node/Flushing-Buffers.html
 	for (j=0; j<udata->nyl; j++)
 	{
 		yy = YMIN + (udata->js+j)*(udata->dy);						// Actual x values
@@ -419,8 +420,17 @@ int main(int argc, char* argv[])
 		{
 		fprintf(UFID2,"\n");
 		}
+
+		if (outproc)
+				{
+					if (iout > 0)
+					{
+						printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
+					}
+					printf("   %3d /%3d done", iout+1, Nt);
+					fflush(stdout);
 	}
-	if (outproc)  cout << "   ----------------------\n";
+	if (outproc)  cout << "\n   ----------------------\n";
 	fclose(UFID);
 
 	if (INCLUDEALLVARS == 1)
