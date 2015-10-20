@@ -66,6 +66,10 @@ using namespace std;
 #define THREE RCONST(3.0)
 #define SURFACEWIDTH RCONST(20.0) 	// Width of the flat surface
 
+// Min and max values for when VARYBETA = 1
+#define BETAMIN 0.7
+#define BETAMAX 1.7
+
 // System parameters
 #define EPSILON 0.36			// Time scale separation of the two variables
 #define DIFF 0.12				// Diffusion coefficient
@@ -87,6 +91,7 @@ double TBOUNDARY = 0.0;					// Time to turn off the absorbing boundary at phi = 
 double TFINAL = 0.0;				// Time to run simulation
 int NX = 0;						// Mesh size in theta direction
 int INCLUDEALLVARS = 0;				// Bool/int for whether we write all variables to file (true=1) or only the main activator variable u (false=0)
+int VARYBETA = 0;					// Bool/int for whether to vary beta over the surface of the torus (true=1) or keep it constant (false=0)
 
 // user data structure
 typedef struct {
@@ -159,6 +164,7 @@ int main(int argc, char* argv[])
 	TFINAL = pt.get<double>("Parameters.tFinal");
 	NX = pt.get<int>("Parameters.thetaMesh");				// This is the mesh of the X direction
 	INCLUDEALLVARS = pt.get<int>("System.includeAllVars");
+	VARYBETA = pt.get<int>("System.varyBeta");
 
 	XMIN = 0.0;				                // grid boundaries in theta
 	XMAX = SURFACEWIDTH - XMIN;
@@ -216,6 +222,12 @@ int main(int argc, char* argv[])
 	flag = SetupDecomp(udata);
 	if (check_flag(&flag, "SetupDecomp", 1)) return 1;
 
+	// Find stable state of ODE model dependent on beta
+	// The model is simple so the solution can be found analytically:
+	double Us, Vs;	// Stable states of U, V respectively
+	Us = -BETA;
+	Vs = BETA*BETA*BETA - 3*BETA;
+
 	// Initial problem output
 	bool outproc = (udata->rank == 0);
 	if (outproc) {
@@ -226,7 +238,6 @@ int main(int argc, char* argv[])
 		cout << "   nxl = " << udata->nxl << "\n";
 		cout << "   nyl = " << udata->nyl << "\n";
 		cout << "   Diff = " << udata->Diff << "\n";
-		cout << "   Beta = " << BETA << "\n";
 		cout << "   Tfinal = " << TFINAL << "\n";
 		cout << "   Output timesteps = " << OUTPUT_TIMESTEP << "\n";
 		cout << "   Surface length = " << SURFACELENGTH << "\n";
@@ -236,6 +247,15 @@ int main(int argc, char* argv[])
 		cout << "   rtol = " << rtol << "\n";
 		cout << "   atol = " << atol << "\n";
 		cout << "   Include all variables in output = " << INCLUDEALLVARS << "\n";
+		if (VARYBETA == 0)
+		{
+			cout << "   Beta = " << BETA << "\n";
+			cout << "   Stable state values: U = " << Us << ", V = " << Vs << "\n\n";
+		}
+		else
+		{
+			cout << "   Beta varied over torus\n\n";
+		}
 	}
 
 	// Initialize data structures
@@ -258,6 +278,13 @@ int main(int argc, char* argv[])
 		{
 			xx = XMIN + (udata->is+i)*(udata->dx);					// Actual x values
 
+			if (VARYBETA == 1)
+			{
+				ydata[IDX(i,j)] = 1;
+				ydata[IDX(i,j) + 1] = 1;
+			}
+			else
+			{
 				// Set initial wave segment
 				if ( xx >= WaveXMIN && xx <= WaveXMAX && yy >= WaveLength && yy <= (2.0*WaveLength) )
 				{
@@ -272,6 +299,7 @@ int main(int argc, char* argv[])
 					ydata[IDX(i,j) + 1] = RCONST(BETA*BETA*BETA - 3*BETA);				// v
 
 				}
+			}
 		}
 	}
 
@@ -519,9 +547,22 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 							   + cu2*(yarray[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
 							   + cu3*yarray[IDX(i,j)];
 
+	realtype b;
+
 	// Add other terms in equations
 	for (j=0; j<nyl; j++)
 	{
+		yy = YMIN + (udata->js+j)*(udata->dy);
+
+		if (VARYBETA == 0)
+		{
+			b = BETA;
+		}
+		else
+		{
+			b = BETAMIN + yy*(BETAMAX - BETAMIN)/(YMAX - YMIN);
+		}
+
 		for (i=0; i<nxl; i++)
 		{
 			realtype u = yarray[IDX(i,j)];
@@ -531,7 +572,7 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 			ydotarray[IDX(i,j)] += THREE*u - u*u*u - v;
 
 			// v variable: dv/dt = eps(u + beta)
-			ydotarray[IDX(i,j)+1] += EPSILON*(u + BETA);
+			ydotarray[IDX(i,j)+1] += EPSILON*(u + b);
 		}
 	}
 

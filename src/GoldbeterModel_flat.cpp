@@ -66,6 +66,10 @@ using namespace std;
 #define THREE RCONST(3.0)
 #define SURFACEWIDTH RCONST(20.0) 	// Width of the flat surface
 
+// Min and max values for when VARYBETA = 1
+#define BETAMIN 0
+#define BETAMAX 1
+
 // System parameters
 #define v0 1.0
 #define k 10.0
@@ -96,10 +100,11 @@ double WAVELENGTH = 0.0;			// Initial wave segment length as a percentage of tot
 double WAVEWIDTH = 0.0;				// Initial wave segment width as a percentage of total width of torus (theta)
 int WAVEINSIDE =  0;				// Bool/int for whether the initial wave is centered on the inside of the torus (true=1) or outside (false=0)
 int OUTPUT_TIMESTEP = 0; 			// Number of timesteps to output to file
-double TBOUNDARY = 0.0;					// Time to turn off the absorbing boundary at phi = 0 (to eliminate backwards travelling waves) - set to 0 for no absorbing boundary
+double TBOUNDARY = 0.0;				// Time to turn off the absorbing boundary at phi = 0 (to eliminate backwards travelling waves) - set to 0 for no absorbing boundary
 double TFINAL = 0.0;				// Time to run simulation
-int NX = 0;						// Mesh size in theta direction
+int NX = 0;							// Mesh size in theta direction
 int INCLUDEALLVARS = 0;				// Bool/int for whether we write all variables to file (true=1) or only the main activator variable u (false=0)
+int VARYBETA = 0;					// Bool/int for whether to vary beta over the surface of the torus (true=1) or keep it constant (false=0)
 
 // user data structure
 typedef struct {
@@ -172,6 +177,7 @@ int main(int argc, char* argv[])
 	TFINAL = pt.get<double>("Parameters.tFinal");
 	NX = pt.get<int>("Parameters.thetaMesh");				// This is the mesh of the X direction
 	INCLUDEALLVARS = pt.get<int>("System.includeAllVars");
+	VARYBETA = pt.get<int>("System.varyBeta");
 
 	XMIN = 0.0;				                // grid boundaries in theta
 	XMAX = SURFACEWIDTH - XMIN;
@@ -229,6 +235,15 @@ int main(int argc, char* argv[])
 	flag = SetupDecomp(udata);
 	if (check_flag(&flag, "SetupDecomp", 1)) return 1;
 
+	// Find stable state of ODE model dependent on beta:
+	// Run python script to solve the ODE problem
+	std::string command = "SolveGoldbeterODE.py " + pt.get<std::string>("Parameters.beta");
+
+	FILE* in = popen(command.c_str(), "r");
+	double Zs, Ys;
+	// Import the last two values of the solution as the stable state of the model
+	int error = fscanf(in, "[%lf] [%lf]", &Zs, &Ys);
+
 	// Initial problem output
 	bool outproc = (udata->rank == 0);
 	if (outproc) {
@@ -239,7 +254,6 @@ int main(int argc, char* argv[])
 		cout << "   nxl = " << udata->nxl << "\n";
 		cout << "   nyl = " << udata->nyl << "\n";
 		cout << "   Diff = " << udata->Diff << "\n";
-		cout << "   Beta = " << BETA << "\n";
 		cout << "   Tfinal = " << TFINAL << "\n";
 		cout << "   Output timesteps = " << OUTPUT_TIMESTEP << "\n";
 		cout << "   Surface length = " << SURFACELENGTH << "\n";
@@ -249,6 +263,15 @@ int main(int argc, char* argv[])
 		cout << "   rtol = " << rtol << "\n";
 		cout << "   atol = " << atol << "\n";
 		cout << "   Include all variables in output = " << INCLUDEALLVARS << "\n";
+		if (VARYBETA == 0)
+		{
+			cout << "   Beta = " << BETA << "\n";
+			cout << "   Stable state values: Z = " << Zs << ", Y = " << Ys << "\n\n";
+		}
+		else
+		{
+			cout << "   Beta varied over torus\n\n";
+		}
 	}
 
 	// Initialize data structures
@@ -261,14 +284,6 @@ int main(int argc, char* argv[])
 	WaveXMIN  = WaveMidpoint - WaveWidth/2.0;
 	WaveXMAX  = WaveMidpoint + WaveWidth/2.0;
 
-	// Find stable state of ODE model dependent on beta:
-	// Run python script to solve the ODE problem
-	std::string command = "python /home/agk29/Documents/Research/CRDModel/util/GoldbeterModel/SolveGoldbeterODE.py /home/agk29/Documents/Research/CRDModel/data/GoldbeterModelArgs.ini";
-	FILE* in = popen(command.c_str(), "r");
-	double Zs, Ys;
-	// Import the last two values of the solution as the stable state of the model
-	int error = fscanf(in, "[%lf] [%lf]", &Zs, &Ys);
-
 	// Set initial conditions - these are model dependent.
 	ydata = N_VGetArrayPointer(y);
 	for (j=0; j<udata->nyl; j++)
@@ -279,6 +294,13 @@ int main(int argc, char* argv[])
 		{
 			xx = XMIN + (udata->is+i)*(udata->dx);					// Actual x values
 
+			if (VARYBETA == 1)
+			{
+				ydata[IDX(i,j)] = 0.4;
+				ydata[IDX(i,j) + 1] = 1.6;
+			}
+			else
+			{
 				// Set initial wave segment
 				if ( xx >= WaveXMIN && xx <= WaveXMAX && yy >= WaveLength && yy <= (2.0*WaveLength) )
 				{
@@ -293,6 +315,7 @@ int main(int argc, char* argv[])
 					ydata[IDX(i,j) + 1] = Ys;
 
 				}
+			}
 		}
 	}
 
@@ -396,8 +419,20 @@ int main(int argc, char* argv[])
 		{
 		fprintf(UFID2,"\n");
 		}
+
+		// Output progress
+		if (outproc)
+		{
+			if (iout > 0)
+			{
+				// Rewrite previous line
+				printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
+			}
+			printf("   %3d /%3d done", iout+1, Nt);
+			fflush(stdout);
+		}
 	}
-	if (outproc)  cout << "   ----------------------\n";
+	if (outproc)  cout << "\n   ----------------------\n";
 	fclose(UFID);
 
 	if (INCLUDEALLVARS == 1)
@@ -541,25 +576,41 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 							   + cu2*(yarray[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
 							   + cu3*yarray[IDX(i,j)];
 
-	// Add other terms in equations
-	for (j=0; j<nyl; j++)
-	{
-		for (i=0; i<nxl; i++)
+	realtype b;
+
+		// Add other terms in equations
+		for (j=0; j<nyl; j++)
 		{
-			realtype Z = yarray[IDX(i,j)];
-			realtype Y = yarray[IDX(i,j)+1];
+			yy = YMIN + (udata->js+j)*(udata->dy);
 
-			// Algebraic equations
-			realtype v2 = VM2 * pow(Z,n) / ( pow(K2,n) + pow(Z,n) );
-			realtype v3 = VM3 * pow(Y,m) * pow(Z,p) / ( (pow(KR,m) + pow(Y,m)) * (pow(KA,p) + pow(Z,p)) );
+			if (VARYBETA == 0)
+			{
+				b = BETA;
+			}
+			else
+			{
+				b = BETAMIN + yy*(BETAMAX - BETAMIN)/(YMAX - YMIN);
+			}
 
-			// Z
-			ydotarray[IDX(i,j)] += v0 + v1*BETA - v2 + v3 + kf*Y - k*Z;
 
-			// Y
-			ydotarray[IDX(i,j)+1] += v2 - v3 - kf*Y;
+			for (i=0; i<nxl; i++)
+			{
+				xx = XMIN + (udata->is+i)*(udata->dx);
+
+				realtype Z = yarray[IDX(i,j)];
+				realtype Y = yarray[IDX(i,j)+1];
+
+				// Algebraic equations
+				realtype v2 = VM2 * pow(Z,n) / ( pow(K2,n) + pow(Z,n) );
+				realtype v3 = VM3 * pow(Y,m) * pow(Z,p) / ( (pow(KR,m) + pow(Y,m)) * (pow(KA,p) + pow(Z,p)) );
+
+				// Z
+				ydotarray[IDX(i,j)] += v0 + v1*b - v2 + v3 + kf*Y - k*Z;
+
+				// Y
+				ydotarray[IDX(i,j)+1] += v2 - v3 - kf*Y;
+			}
 		}
-	}
 
 	return 0;                                      // Return with success
 }

@@ -16,10 +16,11 @@ def plot_GoldbeterModel_torus(programArguments):
 
     # Load relevant parameters from ini file
     conf = ConfigObj(programArguments)
+    systemParameters = conf['System']
     parameters = conf['Parameters']
-    surfaceLength = parameters['majorCirc']
     beta = parameters['beta']
     tFinal = parameters['tFinal']
+    varyBeta = systemParameters['varyBeta']
 
     # determine the number of MPI processes used
     nprocs=1
@@ -85,19 +86,20 @@ def plot_GoldbeterModel_torus(programArguments):
                 results[i,jstart:jend+1,istart:iend+1] = np.reshape(data[i,:], (nyl,nxl))
 
     # determine extents of plots
-    maxtemp = 1.1*results.max()
-    mintemp = 0.9*results.min()
+    maxtemp = results.max()
+    mintemp = results.min()
 
+    lHopf = 0.289*2*np.pi
+    rHopf = 0.774*2*np.pi
 
     # generate plots of results
     for tstep in range(nt):
 
         # set string constants for output plots, current time, mesh size
-        pname = 'GoldbeterModel_torus_surf_Z.' + repr(tstep).zfill(3) + '.png'
-        time = ((float(tstep)/float(nt)))*float(tFinal) # get time of output
-        tstr = repr(float("{0:.1f}".format(time)))  # convert to string with 1 decimal place
-        nxstr = repr(nx)
-        nystr = repr(ny)
+        if varyBeta == 0:
+            pname = 'GoldbeterModel_torus_Z.beta' + beta + '.' + repr(tstep).zfill(3) + '.png'
+        else:
+            pname = 'GoldbeterModel_torus_Z.varyBeta_linear' + repr(tstep).zfill(3) + '.png'
 
         # set x and y meshgrid objects
         xspan = np.linspace(xmin, xmax, nx)
@@ -106,27 +108,33 @@ def plot_GoldbeterModel_torus(programArguments):
 
         # plot current solution as a surface, and save to disk
         fig = plt.figure(1)
-        ax = fig.add_subplot(111, projection='3d')
-        ax.plot_surface(X, Y, results[tstep,:,:], rstride=1, cstride=1,
-                        cmap=cm.jet, vmin=mintemp, vmax=maxtemp, linewidth=0, antialiased=True, shade=True)
-
+        ax = fig.add_subplot(111)
+        img = ax.imshow(results[tstep,:,:], extent=[X.min(), X.max(), Y.min(), Y.max()], cmap='jet', aspect='auto', vmin=mintemp, vmax=maxtemp, origin='lower')
         ax.set_xlabel('theta')
         ax.set_ylabel('phi')
+        fig.colorbar(img)
 
-        ax.set_zlim((mintemp, maxtemp))
-        plt.gca().invert_xaxis()
-        plt.gca().invert_yaxis()
-        ax.view_init(90,90)
-        #title('Torus (curved): u(x,y) at output ' + tstr + ', mesh = ' + nxstr + 'x' + nystr)
-        title('Torus: u(theta, phi) at output ' + tstr + ', mesh = ' + nxstr + 'x' + nystr)
-        savefig(pname)
+        if varyBeta != 0:
+            plt.axhline(y=lHopf, color = 'r', linewidth=1, linestyle='dashed')
+            plt.axhline(y=rHopf, color = 'r', linewidth=1, linestyle='dashed')
+
+        time = ((float(tstep)/float(nt)))*float(tFinal) # get time of output
+        tstr = repr(float("{0:.1f}".format(time)))  # convert to string with 1 decimal place
+        nxstr = repr(nx)
+        nystr = repr(ny)
+        title('Torus: Z(theta, phi) at t = ' + tstr + ', mesh = ' + nxstr + 'x' + nystr)
+        savefig(pname, dpi=100)
         plt.close()
 
 
-    #print '\nConverting png files to animated gif (this maye take some time)...\n'
-    os.system("convert -delay 30 -loop 0 GoldbeterModel_torus_surf_Z.*.png " + "GoldbeterModel_torus.gif")
-    os.system("rm GoldbeterModel_torus_surf_Z.*.png") # clean up files
-    os.system("animate GoldbeterModel_torus.gif") # play animates gif
+    if varyBeta == 0:
+        os.system("convert -delay 20 -loop 0 GoldbeterModel_torus_Z.beta*.png " + "GoldbeterModel_torus_Z.beta" + beta + ".gif")
+        os.system("rm GoldbeterModel_torus_Z.*.png") # clean up files
+        #os.system("animate GoldbeterModel_torus_Z.beta" + beta + ".gif") # play animates gif
+    else:
+        os.system("convert -delay 20 -loop 0 GoldbeterModel_torus_Z.varyBeta_linear*.png " + "GoldbeterModel_torus_Z.varyBeta_linear.gif")
+        os.system("rm GoldbeterModel_torus_Z.varyBeta*.png") # clean up files
+        #os.system("animate GoldbeterModel_torus_Z.varyBeta_linear.gif") # play animates gif
 
 
 if __name__ == '__main__':

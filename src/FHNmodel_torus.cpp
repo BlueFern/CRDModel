@@ -64,8 +64,8 @@ using namespace std;
 #define ONE RCONST(1.0)
 #define TWO RCONST(2.0)
 #define MINORCIRC RCONST(20.0) 	// Minor circumference of the torus
-#define BETA_MIN 0.7
-#define BETA_MAX 1.7
+#define BETAMIN 0.7
+#define BETAMAX 1.7
 
 // System parameters
 #define EPSILON 0.36			// Time scale separation of the two variables
@@ -91,6 +91,7 @@ double TBOUNDARY = 0.0;				// Time to turn off the absorbing boundary at phi = 0
 double TFINAL = 0.0;				// Time to run simulation
 int NX = 0;							// Mesh size in theta direction
 int INCLUDEALLVARS = 0;				// Bool/int for whether we write all variables to file (true=1) or only the main activator variable u (false=0)
+int VARYBETA = 0;					// Bool/int for whether to vary beta over the surface of the torus (true=1) or keep it constant (false=0)
 
 // user data structure
 typedef struct {
@@ -166,6 +167,7 @@ int main(int argc, char* argv[])
 	TFINAL = pt.get<double>("Parameters.tFinal");
 	NX = pt.get<int>("Parameters.thetaMesh");
 	INCLUDEALLVARS = pt.get<int>("System.includeAllVars");
+	VARYBETA = pt.get<int>("System.varyBeta");
 
 	// general problem parameters
 	realtype T0 = RCONST(0.0);   		// initial time
@@ -238,7 +240,6 @@ int main(int argc, char* argv[])
 		cout << "   nxl = " << udata->nxl << "\n";
 		cout << "   nyl = " << udata->nyl << "\n";
 		cout << "   Diff = " << udata->Diff << "\n";
-		cout << "   Beta = " << BETA << "\n";
 		cout << "   Tfinal = " << TFINAL << "\n";
 		cout << "   Output timesteps = " << OUTPUT_TIMESTEP << "\n";
 		cout << "   Major circumference = " << MAJORCIRC << "\n";
@@ -249,7 +250,15 @@ int main(int argc, char* argv[])
 		cout << "   rtol = " << rtol << "\n";
 		cout << "   atol = " << atol << "\n";
 		cout << "   Include all variables in output = " << INCLUDEALLVARS << "\n";
-		cout << "   Stable state values: U = " << Us << ", V = " << Vs << "\n\n";
+		if (VARYBETA == 0)
+		{
+			cout << "   Beta = " << BETA << "\n";
+			cout << "   Stable state values: U = " << Us << ", V = " << Vs << "\n\n";
+		}
+		else
+		{
+			cout << "   Beta varied over torus\n\n";
+		}
 	}
 
 	// Initialize data structures
@@ -277,48 +286,58 @@ int main(int argc, char* argv[])
 	}
 
 	// Set initial conditions - these are model dependent.
-	ydata = N_VGetArrayPointer(y);http://www.gnu.org/software/libc/manual/html_node/Flushing-Buffers.html
+	ydata = N_VGetArrayPointer(y);
 	for (j=0; j<udata->nyl; j++)
-	{
-		yy = YMIN + (udata->js+j)*(udata->dy);						// Actual x values
-
-		for (i=0; i<udata->nxl; i++)
 		{
-			xx = XMIN + (udata->is+i)*(udata->dx);					// Actual x values
+			yy = YMIN + (udata->js+j)*(udata->dy);						// Actual x values
 
-			if (WaveInside == 1)
+			for (i=0; i<udata->nxl; i++)
 			{
-				// Set initial wave segment
-				if ( xx >= WaveXMIN && xx <= WaveXMAX && yy >= WaveLength && yy <= (2.0*WaveLength) )
+				xx = XMIN + (udata->is+i)*(udata->dx);					// Actual x values
+
+				if (VARYBETA == 0)
 				{
-					ydata[IDX(i,j)] = Us + 2;
-					ydata[IDX(i,j) + 1] = Vs + 1.5;
+					if (WaveInside == 1)
+					{
+						// Set initial wave segment
+						if ( xx >= WaveXMIN && xx <= WaveXMAX && yy >= WaveLength && yy <= (2.0*WaveLength) )
+						{
+							ydata[IDX(i,j)] = Us + 2;
+							ydata[IDX(i,j) + 1] = Vs + 1.5;
+						}
+						else
+						{
+							// Set rest of area to stable
+							ydata[IDX(i,j)] = Us;
+							ydata[IDX(i,j) + 1] = Vs;
+
+						}
+					}
+					else if (WaveInside == 0)
+					{
+						// Set initial wave segment
+						if ( (xx >= WaveXMIN || xx <= WaveXMAX) && yy >= WaveLength && yy <= (2.0*WaveLength) )
+						{
+							ydata[IDX(i,j)] = Us + 2;
+							ydata[IDX(i,j) + 1] = Vs + 1.5;
+						}
+						else
+						{
+							// Set rest of area to stable
+							ydata[IDX(i,j)] = Us;
+							ydata[IDX(i,j) + 1] = Vs;
+
+						}
+					}
 				}
 				else
 				{
-					// Set rest of area to stable u,v
-					ydata[IDX(i,j)] = Us;
-					ydata[IDX(i,j) + 1] = Vs;
-				}
-			}
-			else if (WaveInside == 0)
-			{
-				// Set initial wave segment
-				if ( (xx >= WaveXMIN || xx <= WaveXMAX) && yy >= WaveLength && yy <= (2.0*WaveLength) )
-				{
-					ydata[IDX(i,j)] = Us + 2;
-					ydata[IDX(i,j) + 1] = Vs + 1.5;
-				}
-				else
-				{
-					// Set rest of area to stable u,v
-					ydata[IDX(i,j)] = Us;
-					ydata[IDX(i,j) + 1] = Vs;
-
+					// If we vary beta over torus, set all of surface to same initial condition
+					ydata[IDX(i,j)] = 1;
+					ydata[IDX(i,j)+1] = 1;
 				}
 			}
 		}
-	}
 
 	arkode_mem = ARKodeCreate();                       // Create the solver memory
 	if (check_flag((void *) arkode_mem, "ARKodeCreate", 0)) return 1;
@@ -421,14 +440,17 @@ int main(int argc, char* argv[])
 		fprintf(UFID2,"\n");
 		}
 
+		// Output progress
 		if (outproc)
-				{
-					if (iout > 0)
-					{
-						printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
-					}
-					printf("   %3d /%3d done", iout+1, Nt);
-					fflush(stdout);
+		{
+			if (iout > 0)
+			{
+				// Rewrite previous line
+				printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
+			}
+			printf("   %3d /%3d done", iout+1, Nt);
+			fflush(stdout);
+		}
 	}
 	if (outproc)  cout << "\n   ----------------------\n";
 	fclose(UFID);
@@ -512,13 +534,19 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 							+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (yarray[IDX(i,j+1)] - 2*yarray[IDX(i,j)] + yarray[IDX(i,j-1)]))/(dy*dy);
 
 	}
-	// South face: absorbing boundary at phi = 0, if js = 0 and time < TBOUNDARY, so that no backwards travelling waves occur
+	// South face:no flux boundary at phi = 0, if js = 0 and time < TBOUNDARY, so that no backwards travelling waves occur
 	j=0;
 	if (udata->js == 0 && t<TBOUNDARY)
 	{
 		for (i=1; i<nxl-1; i++)
 		{
-			ydotarray[IDX(i,j)] = 0;
+			ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - yarray[IDX(i-1,j)]) )/(2*dx)
+										+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
+										+ 0;
+//			ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - yarray[IDX(i-1,j)]) )/(2*dx)
+//									+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
+//									+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (2*yarray[IDX(i,j+1)] - 2*yarray[IDX(i,j)]))/(dy*dy);
+
 		}
 	}
 	else
@@ -534,22 +562,46 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	}
 	// North face
 	j=nyl-1;
-	for (i=1; i<nxl-1; i++)
+	if (udata->je == udata->nx-1 && t<TBOUNDARY)
 	{
-		xx = XMIN + (udata->is+i)*(dx);
+		for (i=1; i<nxl-1; i++)
+		{
+			xx = XMIN + (udata->is+i)*(dx);
 
-		ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - yarray[IDX(i-1,j)]) )/(2*dx)
-							+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
-							+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (udata->Nrecv[NVARS*i] - 2*yarray[IDX(i,j)] + yarray[IDX(i,j-1)]))/(dy*dy);
+			ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - yarray[IDX(i-1,j)]) )/(2*dx)
+								+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
+								+ 0;
+//			ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - yarray[IDX(i-1,j)]) )/(2*dx)
+//								+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
+//								+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (- 2*yarray[IDX(i,j)] + 2*yarray[IDX(i,j-1)]))/(dy*dy);
 
+		}
 	}
+	else
+	{
+		for (i=1; i<nxl-1; i++)
+		{
+			xx = XMIN + (udata->is+i)*(dx);
+
+			ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - yarray[IDX(i-1,j)]) )/(2*dx)
+								+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
+								+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (udata->Nrecv[NVARS*i] - 2*yarray[IDX(i,j)] + yarray[IDX(i,j-1)]))/(dy*dy);
+		}
+	}
+
 	// South-West corner
 	i = 0;
 	j = 0;
 	xx = XMIN + (udata->is+i)*(dx);
 	if (udata->js == 0 && t<TBOUNDARY)
 	{
-		ydotarray[IDX(i,j)] = 0;
+		ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - udata->Wrecv[NVARS*j]) )/(2*dx)
+								+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + udata->Wrecv[NVARS*j]))/(dx*dx)
+								+ 0;
+//		ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - udata->Wrecv[NVARS*j]) )/(2*dx)
+//								+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + udata->Wrecv[NVARS*j]))/(dx*dx)
+//								+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (2*yarray[IDX(i,j+1)] - 2*yarray[IDX(i,j)] ))/(dy*dy);
+
 	}
 	else
 	{
@@ -561,9 +613,22 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	i = 0;
 	j = nyl-1;
 	xx = XMIN + (udata->is+i)*(dx);
-	ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - udata->Wrecv[NVARS*j]) )/(2*dx)
-						+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + udata->Wrecv[NVARS*j]))/(dx*dx)
-						+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (udata->Nrecv[NVARS*i] - 2*yarray[IDX(i,j)] + yarray[IDX(i,j-1)]))/(dy*dy);
+	if (udata->je == udata->nx-1 && t<TBOUNDARY)
+	{
+		ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - udata->Wrecv[NVARS*j]) )/(2*dx)
+								+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + udata->Wrecv[NVARS*j]))/(dx*dx)
+								+ 0;
+//		ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - udata->Wrecv[NVARS*j]) )/(2*dx)
+//								+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + udata->Wrecv[NVARS*j]))/(dx*dx)
+//								+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* ( - 2*yarray[IDX(i,j)] + 2*yarray[IDX(i,j-1)]))/(dy*dy);
+
+	}
+	else
+	{
+		ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - udata->Wrecv[NVARS*j]) )/(2*dx)
+								+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + udata->Wrecv[NVARS*j]))/(dx*dx)
+								+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (udata->Nrecv[NVARS*i] - 2*yarray[IDX(i,j)] + yarray[IDX(i,j-1)]))/(dy*dy);
+	}
 
 	// South-East corner
 	i = nxl-1;
@@ -571,7 +636,14 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	xx = XMIN + (udata->is+i)*(dx);
 	if (udata->js == 0 && t<TBOUNDARY)
 	{
-		ydotarray[IDX(i,j)] = 0;
+		ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(udata->Erecv[NVARS*j] - yarray[IDX(i-1,j)]) )/(2*dx)
+								+ Diff*( (1/(r*r))* (udata->Erecv[NVARS*j] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
+								+ 0;
+//		ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(udata->Erecv[NVARS*j] - yarray[IDX(i-1,j)]) )/(2*dx)
+//								+ Diff*( (1/(r*r))* (udata->Erecv[NVARS*j] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
+//								+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (2*yarray[IDX(i,j+1)] - 2*yarray[IDX(i,j)]))/(dy*dy);
+
+
 	}
 	else
 	{
@@ -584,18 +656,38 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	i = nxl-1;
 	j = nyl-1;
 	xx = XMIN + (udata->is+i)*(dx);
-	ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(udata->Erecv[NVARS*j] - yarray[IDX(i-1,j)]) )/(2*dx)
-						+ Diff*( (1/(r*r))* (udata->Erecv[NVARS*j] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
-						+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (udata->Nrecv[NVARS*i] - 2*yarray[IDX(i,j)] + yarray[IDX(i,j-1)]))/(dy*dy);
+	if (udata->je == udata->nx-1 && t<TBOUNDARY)
+	{
+		ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(udata->Erecv[NVARS*j] - yarray[IDX(i-1,j)]) )/(2*dx)
+								+ Diff*( (1/(r*r))* (udata->Erecv[NVARS*j] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
+								+ 0;
+//		ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(udata->Erecv[NVARS*j] - yarray[IDX(i-1,j)]) )/(2*dx)
+//								+ Diff*( (1/(r*r))* (udata->Erecv[NVARS*j] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
+//								+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* ( - 2*yarray[IDX(i,j)] + 2*yarray[IDX(i,j-1)]))/(dy*dy);
 
+	}
+	else
+	{
+		ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(udata->Erecv[NVARS*j] - yarray[IDX(i-1,j)]) )/(2*dx)
+								+ Diff*( (1/(r*r))* (udata->Erecv[NVARS*j] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
+								+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (udata->Nrecv[NVARS*i] - 2*yarray[IDX(i,j)] + yarray[IDX(i,j-1)]))/(dy*dy);
+	}
+
+	realtype b;
 
 	// Add other terms in equations
 	for (j=0; j<nyl; j++)
 	{
 		yy = YMIN + (udata->js+j)*(udata->dy);
 
-		// Calculate BETA based on the position on the torus
-		realtype BETA_y =  BETA_MIN + yy*(BETA_MAX-BETA_MIN)/(YMAX-YMIN);
+		if (VARYBETA == 0)
+		{
+			b = BETA;
+		}
+		else
+		{
+			b = BETAMIN + yy*(BETAMAX - BETAMIN)/(YMAX - YMIN);
+		}
 
 		for (i=0; i<nxl; i++)
 		{
@@ -608,7 +700,7 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 			ydotarray[IDX(i,j)] += 3.0*u - (u*u*u) - v;
 
 			// v variable: dv/dt = eps(u + beta)
-			ydotarray[IDX(i,j)+1] += EPSILON*(u + BETA);
+			ydotarray[IDX(i,j)+1] += EPSILON*(u + b);
 		}
 	}
 
