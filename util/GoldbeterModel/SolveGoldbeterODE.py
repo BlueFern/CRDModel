@@ -102,5 +102,4 @@ if __name__ == '__main__':
     ax2.set_xlabel('Time')
     ax2.set_ylabel('Y')
 
-    fig.savefig('coupled-ode-Python.png')
     print Z[-1], Y[-1]

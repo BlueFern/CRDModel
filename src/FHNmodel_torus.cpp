@@ -64,8 +64,6 @@ using namespace std;
 #define ONE RCONST(1.0)
 #define TWO RCONST(2.0)
 #define MINORCIRC RCONST(20.0) 	// Minor circumference of the torus
-#define BETAMIN 0.7
-#define BETAMAX 1.7
 
 // System parameters
 #define EPSILON 0.36			// Time scale separation of the two variables
@@ -90,6 +88,8 @@ int OUTPUT_TIMESTEP = 0; 			// Number of timesteps to output to file
 double TBOUNDARY = 0.0;				// Time to turn off the absorbing boundary at phi = 0 (to eliminate backwards travelling waves) - set to 0 for no absorbing boundary
 double TFINAL = 0.0;				// Time to run simulation
 int NX = 0;							// Mesh size in theta direction
+double BETAMIN = 0;					// Minimum beta value when varyBeta = 1
+double BETAMAX = 0;					// Maximum beta value when varyBeta = 1
 int INCLUDEALLVARS = 0;				// Bool/int for whether we write all variables to file (true=1) or only the main activator variable u (false=0)
 int VARYBETA = 0;					// Bool/int for whether to vary beta over the surface of the torus (true=1) or keep it constant (false=0)
 
@@ -166,6 +166,8 @@ int main(int argc, char* argv[])
 	TBOUNDARY = pt.get<double>("Parameters.tBoundary");
 	TFINAL = pt.get<double>("Parameters.tFinal");
 	NX = pt.get<int>("Parameters.thetaMesh");
+	BETAMIN = pt.get<double>("Parameters.betaMin");
+	BETAMAX = pt.get<double>("Parameters.betaMax");
 	INCLUDEALLVARS = pt.get<int>("System.includeAllVars");
 	VARYBETA = pt.get<int>("System.varyBeta");
 
@@ -534,7 +536,7 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 							+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (yarray[IDX(i,j+1)] - 2*yarray[IDX(i,j)] + yarray[IDX(i,j-1)]))/(dy*dy);
 
 	}
-	// South face:no flux boundary at phi = 0, if js = 0 and time < TBOUNDARY, so that no backwards travelling waves occur
+	// South face: no diffusion boundary i.e. u_phiphi(theta, phi=0) = 0, if js = 0 and time < TBOUNDARY, so that no backwards travelling waves occur
 	j=0;
 	if (udata->js == 0 && t<TBOUNDARY)
 	{
@@ -560,7 +562,7 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 								+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (yarray[IDX(i,j+1)] - 2*yarray[IDX(i,j)] + udata->Srecv[NVARS*i]))/(dy*dy);
 		}
 	}
-	// North face
+	// North face: no diffusion boundary i.e. u_phiphi(theta, phi=2pi) = 0
 	j=nyl-1;
 	if (udata->je == udata->nx-1 && t<TBOUNDARY)
 	{
@@ -691,8 +693,6 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 
 		for (i=0; i<nxl; i++)
 		{
-			xx = XMIN + (udata->is+i)*(udata->dx);
-
 			realtype u = yarray[IDX(i,j)];
 			realtype v = yarray[IDX(i,j)+1];
 

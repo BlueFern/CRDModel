@@ -20,7 +20,9 @@ def plot_FHNmodel_flat(programArguments):
     surfaceLength = parameters['majorCirc']
     beta = parameters['beta']
     tFinal = parameters['tFinal']
-    varyBeta = systemParameters['varyBeta']
+    betaMin = float(parameters['betaMin'])
+    betaMax = float(parameters['betaMax'])
+    varyBeta = int(systemParameters['varyBeta'])
     
     # determine the number of MPI processes used
     nprocs=1
@@ -86,7 +88,12 @@ def plot_FHNmodel_flat(programArguments):
     maxtemp = results.max()
     mintemp = results.min()
 
-    Hopf = 1.0*float(surfaceLength)
+    if varyBeta == 1:
+        # Obtain location of Hopf by inverse of beta = BETAMIN + (BETAMAX - BETAMIN)/(surfacelength)*phi
+        Hopf = (1.0 - betaMin)*float(surfaceLength)/(betaMax - betaMin)
+
+    # Create subdirectory for the png files
+    os.system("mkdir png")
 
     # generate plots of results
     for tstep in range(nt):
@@ -115,7 +122,7 @@ def plot_FHNmodel_flat(programArguments):
         ax.set_ylabel('y')
         fig.colorbar(img)
 
-        if varyBeta != 0:
+        if varyBeta == 1:
             plt.axhline(y=Hopf, color = 'r', linewidth=1, linestyle='dashed')
 
         time = ((float(tstep)/float(nt)))*float(tFinal) # get time of output
@@ -123,18 +130,18 @@ def plot_FHNmodel_flat(programArguments):
         nxstr = repr(nx)
         nystr = repr(ny)
         title('Flat: u(x,y) at t = ' + tstr + ', mesh = ' + nxstr + 'x' + nystr)
-        savefig(pname, dpi=100)
+        savefig(pname, dpi=50)
         plt.close()
     
     
+    # Convert png to video mp4
     if varyBeta == 0:
-        os.system("convert -delay 20 -loop 0 FHNmodel_flat_Z.beta*.png " + "FHNmodel_flat_Z.beta" + beta + ".gif")
-        os.system("rm FHNmodel_flat_Z.*.png") # clean up files
-        #os.system("animate FHNmodel_flat_Z.beta" + beta + ".gif") # play animates gif
+        os.system("ffmpeg -r 6 -i png/FHNmodel_flat_Z.beta" + beta + "%03d.png FHNmodel_flat_Z.beta" + beta + ".mp4")
+      # os.system("rm GoldbeterModel_flat_Z.*.png") # clean up files
     else:
-        os.system("convert -delay 20 -loop 0 FHNmodel_flat_Z.varyBeta_linear*.png " + "FHNmodel_flat_Z.varyBeta_linear.gif")
-        os.system("rm FHNmodel_flat_Z.varyBeta*.png") # clean up files
-        #os.system("animate FHNmodel_flat_Z.varyBeta_linear.gif") # play animates gif
+        os.system("ffmpeg -r 6 -i png/FHNmodel_flat_Z.varyBeta_linear%03d.png FHNmodel_flat_Z.varyBeta_linear.mp4")
+      # os.system("rm GoldbeterModel_flat_Z.varyBeta*.png") # clean up files
+
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:

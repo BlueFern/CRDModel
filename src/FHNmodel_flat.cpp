@@ -87,9 +87,11 @@ double WAVELENGTH = 0.0;			// Initial wave segment length as a percentage of tot
 double WAVEWIDTH = 0.0;				// Initial wave segment width as a percentage of total width of torus (theta)
 int WAVEINSIDE =  0;				// Bool/int for whether the initial wave is centered on the inside of the torus (true=1) or outside (false=0)
 int OUTPUT_TIMESTEP = 0; 			// Number of timesteps to output to file
-double TBOUNDARY = 0.0;					// Time to turn off the absorbing boundary at phi = 0 (to eliminate backwards travelling waves) - set to 0 for no absorbing boundary
+double TBOUNDARY = 0.0;				// Time to turn off the absorbing boundary at phi = 0 (to eliminate backwards travelling waves) - set to 0 for no absorbing boundary
 double TFINAL = 0.0;				// Time to run simulation
-int NX = 0;						// Mesh size in theta direction
+int NX = 0;							// Mesh size in theta direction
+double BETAMIN = 0;					// Minimum beta value when varyBeta = 1
+double BETAMAX = 0;					// Maximum beta value when varyBeta = 1
 int INCLUDEALLVARS = 0;				// Bool/int for whether we write all variables to file (true=1) or only the main activator variable u (false=0)
 int VARYBETA = 0;					// Bool/int for whether to vary beta over the surface of the torus (true=1) or keep it constant (false=0)
 
@@ -163,6 +165,8 @@ int main(int argc, char* argv[])
 	TBOUNDARY = pt.get<double>("Parameters.tBoundary");
 	TFINAL = pt.get<double>("Parameters.tFinal");
 	NX = pt.get<int>("Parameters.thetaMesh");				// This is the mesh of the X direction
+	BETAMIN = pt.get<double>("Parameters.betaMin");
+	BETAMAX = pt.get<double>("Parameters.betaMax");
 	INCLUDEALLVARS = pt.get<int>("System.includeAllVars");
 	VARYBETA = pt.get<int>("System.varyBeta");
 
@@ -402,6 +406,18 @@ int main(int argc, char* argv[])
 		if (INCLUDEALLVARS == 1)
 		{
 		fprintf(UFID2,"\n");
+		}
+
+		// Output progress
+		if (outproc)
+		{
+			if (iout > 0)
+			{
+				// Rewrite previous line
+				printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
+			}
+			printf("   %3d /%3d done", iout+1, Nt);
+			fflush(stdout);
 		}
 	}
 	if (outproc)  cout << "   ----------------------\n";

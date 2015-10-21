@@ -20,7 +20,7 @@ def plot_GoldbeterModel_torus(programArguments):
     parameters = conf['Parameters']
     beta = parameters['beta']
     tFinal = parameters['tFinal']
-    varyBeta = systemParameters['varyBeta']
+    varyBeta = int(systemParameters['varyBeta'])
 
     # determine the number of MPI processes used
     nprocs=1
@@ -89,17 +89,22 @@ def plot_GoldbeterModel_torus(programArguments):
     maxtemp = results.max()
     mintemp = results.min()
 
-    lHopf = 0.289*2*np.pi
-    rHopf = 0.774*2*np.pi
+    if varyBeta == 1:
+        # Obtain location of Hopfs by inverse of beta = BETAMIN + (BETAMAX - BETAMIN)/(2pi)*phi
+        lHopf = 0.289*2*np.pi
+        rHopf = 0.774*2*np.pi
+
+    # Create subdirectory for the png files
+    os.system("mkdir png")
 
     # generate plots of results
     for tstep in range(nt):
 
         # set string constants for output plots, current time, mesh size
         if varyBeta == 0:
-            pname = 'GoldbeterModel_torus_Z.beta' + beta + '.' + repr(tstep).zfill(3) + '.png'
+            pname = 'png/GoldbeterModel_torus_Z.beta' + beta + '.' + repr(tstep).zfill(3) + '.png'
         else:
-            pname = 'GoldbeterModel_torus_Z.varyBeta_linear' + repr(tstep).zfill(3) + '.png'
+            pname = 'png/GoldbeterModel_torus_Z.varyBeta_linear' + repr(tstep).zfill(3) + '.png'
 
         # set x and y meshgrid objects
         xspan = np.linspace(xmin, xmax, nx)
@@ -114,7 +119,7 @@ def plot_GoldbeterModel_torus(programArguments):
         ax.set_ylabel('phi')
         fig.colorbar(img)
 
-        if varyBeta != 0:
+        if varyBeta == 1:
             plt.axhline(y=lHopf, color = 'r', linewidth=1, linestyle='dashed')
             plt.axhline(y=rHopf, color = 'r', linewidth=1, linestyle='dashed')
 
@@ -123,18 +128,16 @@ def plot_GoldbeterModel_torus(programArguments):
         nxstr = repr(nx)
         nystr = repr(ny)
         title('Torus: Z(theta, phi) at t = ' + tstr + ', mesh = ' + nxstr + 'x' + nystr)
-        savefig(pname, dpi=100)
+        savefig(pname, dpi=150)
         plt.close()
 
-
+    # Convert png to video mp4
     if varyBeta == 0:
-        os.system("convert -delay 20 -loop 0 GoldbeterModel_torus_Z.beta*.png " + "GoldbeterModel_torus_Z.beta" + beta + ".gif")
-        os.system("rm GoldbeterModel_torus_Z.*.png") # clean up files
-        #os.system("animate GoldbeterModel_torus_Z.beta" + beta + ".gif") # play animates gif
+        os.system("ffmpeg -r 6 -i png/GoldbeterModel_torus_Z.beta" + beta + "%03d.png GoldbeterModel_torus_Z.beta" + beta + ".mp4")
+      # os.system("rm GoldbeterModel_torus_Z.*.png") # clean up files
     else:
-        os.system("convert -delay 20 -loop 0 GoldbeterModel_torus_Z.varyBeta_linear*.png " + "GoldbeterModel_torus_Z.varyBeta_linear.gif")
-        os.system("rm GoldbeterModel_torus_Z.varyBeta*.png") # clean up files
-        #os.system("animate GoldbeterModel_torus_Z.varyBeta_linear.gif") # play animates gif
+        os.system("ffmpeg -r 6 -i png/GoldbeterModel_torus_Z.varyBeta_linear%03d.png GoldbeterModel_torus_Z.varyBeta_linear.mp4")
+     # os.system("rm GoldbeterModel_torus_Z.varyBeta*.png") # clean up files
 
 
 if __name__ == '__main__':

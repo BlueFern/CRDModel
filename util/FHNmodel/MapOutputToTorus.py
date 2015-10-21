@@ -29,7 +29,7 @@ def XYZtoRC(xyz,ny,nx,r,R):
     # using the number of rows (ny) and number of columns (nx)
     rc = (int(phi/(2*np.pi)*(ny-1)), int(theta/(2*np.pi)*(nx-1)) )
 
-    return rc
+    return phi, theta, rc
     
 
 if __name__ == '__main__':
@@ -46,13 +46,20 @@ if __name__ == '__main__':
     majorCirc = parameters['majorCirc']
     thetaMesh = parameters['thetaMesh']
     tFinal = parameters['tFinal']
-    includeAllVars = systemParameters['includeAllVars']
+    includeAllVars = int(systemParameters['includeAllVars'])
+    varyBeta = int(systemParameters['varyBeta'])
 
     # Minor radius of torus
     r = 20/(2*np.pi)
     
     # Major radius of torus
     R = float(majorCirc)/(2*np.pi)
+
+    BETAMIN = 0.7
+    BETAMAX = 1.7
+
+    # Hopf bifurcation position
+    if (varyBeta == 1): Hopf = (1.0 - BETAMIN)*2*np.pi/(BETAMAX - BETAMIN)
     
     # determine the number of MPI processes used
     nprocs=1
@@ -100,7 +107,7 @@ if __name__ == '__main__':
     
     for i in range(nt):
         resultsU[i,jstart:jend+1,istart:iend+1] = np.reshape(dataU[i,:], (nyl,nxl))
-        if (includeAllVars == 1): resultsV[i,jstart:jend+1,istart:iend+1] = np.reshape(dataV[i,:], (nyl,nxl))
+        if (includeAllVars == 1): resultsV[i,jstart:jend+1,istart:iend+1] = np.reshape(dataU[i,:], (nyl,nxl))
         
     # iterate over remaining data files, inserting into output
     if (nprocs > 1):
@@ -148,8 +155,12 @@ if __name__ == '__main__':
         
         activatorArray = vtk.vtkDoubleArray()
         activatorArray.SetName("Activator")
+
+        if (varyBeta == 1):
+            HopfArray = vtk.vtkDoubleArray()
+            HopfArray.SetName("Hopf Bifurcations")
         
-        if (includeAllVars == 1): 
+        if (includeAllVars == 1):
             inhibitorArray = vtk.vtkDoubleArray()
             inhibitorArray.SetName("Inhibitor")
         
@@ -157,15 +168,24 @@ if __name__ == '__main__':
         for cId in range(cellCentres.GetNumberOfPoints()):
             point = cellCentres.GetPoint(cId)
             
-            rc = XYZtoRC(point,ny,nx,r,R)              
+            phi, theta, rc = XYZtoRC(point,ny,nx,r,R)
             
             resultU = resultsU[tstep,rc[0],rc[1]]
             if (includeAllVars == 1): resultV = resultsV[tstep,rc[0],rc[1]]
-            
+
+            # Set to 1 if it's at one of the Hopf bifurcation, otherwise 0
+            if (varyBeta == 1):
+                if abs(phi - Hopf) < 0.01:
+                    resultHopf = 1
+                else:
+                    resultHopf = 0
+
             activatorArray.InsertNextValue(resultU)
+            if (varyBeta == 1): HopfArray.InsertNextValue(resultHopf)
             if (includeAllVars == 1): inhibitorArray.InsertNextValue(resultV)
         
         torus.GetCellData().SetScalars(activatorArray)  # default variable
+        if (varyBeta == 1): torus.GetCellData().AddArray(HopfArray) # Hopf bifurcations
         if (includeAllVars == 1): torus.GetCellData().AddArray(inhibitorArray)    # other variable(s)
 
 

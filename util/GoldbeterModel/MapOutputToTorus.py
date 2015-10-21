@@ -29,7 +29,7 @@ def XYZtoRC(xyz,ny,nx,r,R):
     # using the number of rows (ny) and number of columns (nx)
     rc = (int(phi/(2*np.pi)*(ny-1)), int(theta/(2*np.pi)*(nx-1)) )
 
-    return rc
+    return phi, theta, rc
     
 
 if __name__ == '__main__':
@@ -46,13 +46,19 @@ if __name__ == '__main__':
     majorCirc = parameters['majorCirc']
     thetaMesh = parameters['thetaMesh']
     tFinal = parameters['tFinal']
-    includeAllVars = systemParameters['includeAllVars']
+    includeAllVars = int(systemParameters['includeAllVars'])
+    varyBeta = int(systemParameters['varyBeta'])
 
     # Minor radius of torus
     r = 20/(2*np.pi)
     
     # Major radius of torus
     R = float(majorCirc)/(2*np.pi)
+
+    # Hopf bifurcation positions
+    if (varyBeta == 1):
+        lHopf = 0.289*2*np.pi
+        rHopf = 0.774*2*np.pi
     
     # determine the number of MPI processes used
     nprocs=1
@@ -80,15 +86,14 @@ if __name__ == '__main__':
        
        
     # load first processor's data for variable U and V
-    dataU = np.loadtxt('GoldbeterModel_torus_Z.000.txt', dtype=np.double)
-    if (includeAllVars == 1):  dataV = np.loadtxt('GoldbeterModel_torus_Y.000.txt', dtype=np.double)
+    dataZ = np.loadtxt('GoldbeterModel_torus_Z.000.txt', dtype=np.double)
     
     # determine total number of time steps
-    nt = np.shape(dataU)[0]
+    nt = np.shape(dataZ)[0]
     
     # create empty array for all solution data of the variables U and V
-    resultsU = np.zeros((nt,ny,nx))
-    if (includeAllVars == 1): resultsV = np.zeros((nt,ny,nx))
+    resultsZ = np.zeros((nt,ny,nx))
+    if (includeAllVars == 1): resultsY = np.zeros((nt,ny,nx))
     
     # insert first processor's data into results array
     istart = subdomains[0,0]
@@ -99,8 +104,8 @@ if __name__ == '__main__':
     nyl = jend-jstart+1
     
     for i in range(nt):
-        resultsU[i,jstart:jend+1,istart:iend+1] = np.reshape(dataU[i,:], (nyl,nxl))
-        if (includeAllVars == 1): resultsV[i,jstart:jend+1,istart:iend+1] = np.reshape(dataV[i,:], (nyl,nxl))
+        resultsZ[i,jstart:jend+1,istart:iend+1] = np.reshape(dataZ[i,:], (nyl,nxl))
+        if (includeAllVars == 1): resultsY[i,jstart:jend+1,istart:iend+1] = np.reshape(dataZ[i,:], (nyl,nxl))
         
     # iterate over remaining data files, inserting into output
     if (nprocs > 1):
@@ -121,8 +126,8 @@ if __name__ == '__main__':
             nyl = jend-jstart+1
             
             for i in range(nt):
-                resultsU[i,jstart:jend+1,istart:iend+1] = np.reshape(dataU[i,:], (nyl,nxl))
-                if (includeAllVars == 1): resultsV[i,jstart:jend+1,istart:iend+1] = np.reshape(dataV[i,:], (nyl,nxl))
+                resultsZ[i,jstart:jend+1,istart:iend+1] = np.reshape(dataU[i,:], (nyl,nxl))
+                if (includeAllVars == 1): resultsY[i,jstart:jend+1,istart:iend+1] = np.reshape(dataV[i,:], (nyl,nxl))
 
     tStepDict = dict()
 
@@ -148,8 +153,12 @@ if __name__ == '__main__':
         
         ZArray = vtk.vtkDoubleArray()
         ZArray.SetName("Cytosolic Calcium")
+
+        if (varyBeta == 1):
+            HopfArray = vtk.vtkDoubleArray()
+            HopfArray.SetName("Hopf Bifurcations")
         
-        if (includeAllVars == 1): 
+        if (includeAllVars == 1):
             YArray = vtk.vtkDoubleArray()
             YArray.SetName("Calcium in Stores")
         
@@ -157,15 +166,24 @@ if __name__ == '__main__':
         for cId in range(cellCentres.GetNumberOfPoints()):
             point = cellCentres.GetPoint(cId)
             
-            rc = XYZtoRC(point,ny,nx,r,R)              
+            phi, theta, rc = XYZtoRC(point,ny,nx,r,R)
             
-            resultU = resultsU[tstep,rc[0],rc[1]]
-            if (includeAllVars == 1): resultV = resultsV[tstep,rc[0],rc[1]]
-            
-            ZArray.InsertNextValue(resultU)
-            if (includeAllVars == 1): YArray.InsertNextValue(resultV)
+            resultZ = resultsZ[tstep,rc[0],rc[1]]
+            if (includeAllVars == 1): resultY = resultsY[tstep,rc[0],rc[1]]
+
+            # Set to 1 if it's at one of the Hopf bifurcation, otherwise 0
+            if (varyBeta == 1):
+                if (abs(phi - lHopf) < 0.01) or (abs(phi - rHopf) < 0.01):
+                    resultHopf = 1
+                else:
+                    resultHopf = 0
+
+            ZArray.InsertNextValue(resultZ)
+            if (varyBeta == 1): HopfArray.InsertNextValue(resultHopf)
+            if (includeAllVars == 1): YArray.InsertNextValue(resultY)
         
         torus.GetCellData().SetScalars(ZArray)  # default variable
+        if (varyBeta == 1): torus.GetCellData().AddArray(HopfArray) # Hopf bifurcations
         if (includeAllVars == 1): torus.GetCellData().AddArray(YArray)    # other variable(s)
 
 

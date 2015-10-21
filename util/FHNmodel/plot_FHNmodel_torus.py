@@ -19,7 +19,9 @@ def plot_FHNmodel_torus(programArguments):
     parameters = conf['Parameters']
     beta = parameters['beta']
     tFinal = parameters['tFinal']
-    varyBeta = systemParameters['varyBeta']
+    betaMin = float(parameters['betaMin'])
+    betaMax = float(parameters['betaMax'])
+    varyBeta = int(systemParameters['varyBeta'])
 
     # determine the number of MPI processes used
     nprocs=1
@@ -88,17 +90,21 @@ def plot_FHNmodel_torus(programArguments):
     maxtemp = 1.1*results.max()
     mintemp = 0.9*results.min()
 
-    if varyBeta != 0:
-        Hopf = 1.0*2*np.pi
+    if varyBeta == 1:
+        # Obtain location of Hopf by inverse of beta = BETAMIN + (BETAMAX - BETAMIN)/(2pi)*phi
+        Hopf = (1.0 - betaMin)*2*np.pi/(betaMax - betaMin)
+
+    # Create subdirectory for the png files
+    os.system("mkdir png")
 
     # generate plots of results
     for tstep in range(nt):
 
         # set string constants for output plots, current time, mesh size
         if varyBeta == 0:
-            pname = 'FHNmodel_torus_Z.beta' + beta + '.' + repr(tstep).zfill(3) + '.png'
+            pname = 'png/FHNmodel_torus_Z.beta' + beta + '.' + repr(tstep).zfill(3) + '.png'
         else:
-            pname = 'FHNmodel_torus_Z.varyBeta_linear' + repr(tstep).zfill(3) + '.png'
+            pname = 'png/FHNmodel_torus_Z.varyBeta_linear' + repr(tstep).zfill(3) + '.png'
 
         # set x and y meshgrid objects
         xspan = np.linspace(xmin, xmax, nx)
@@ -113,7 +119,7 @@ def plot_FHNmodel_torus(programArguments):
         ax.set_ylabel('phi')
         fig.colorbar(img)
 
-        if varyBeta != 0:
+        if varyBeta == 1:
             plt.axhline(y=Hopf, color = 'r', linewidth=1, linestyle='dashed')
 
         time = ((float(tstep)/float(nt)))*float(tFinal) # get time of output
@@ -121,26 +127,22 @@ def plot_FHNmodel_torus(programArguments):
         nxstr = repr(nx)
         nystr = repr(ny)
         title('Torus: u(theta, phi) at t = ' + tstr + ', mesh = ' + nxstr + 'x' + nystr)
-        savefig(pname, dpi=100)
+        savefig(pname, dpi=150)
         plt.close()
 
-        ax.set_zlim((mintemp, maxtemp))
-        plt.gca().invert_xaxis()
-        plt.gca().invert_yaxis()
-        ax.view_init(90,90)
-        #title('Torus (curved): u(x,y) at output ' + tstr + ', mesh = ' + nxstr + 'x' + nystr)
-        title('Torus: u(theta, phi) at t = ' + tstr + ', mesh = ' + nxstr + 'x' + nystr)
-        savefig(pname)
-        plt.close()
+    # Convert png to video mp4
+    if varyBeta == 0:
+        os.system("ffmpeg -r 6 -i png/FHNmodel_torus_Z.beta" + beta + "%03d.png FHNmodel_torus_Z.beta" + beta + ".mp4")
+      # os.system("rm FHNmodel_torus_Z.*.png") # clean up files
+    else:
+        os.system("ffmpeg -r 6 -i png/FHNmodel_torus_Z.varyBeta_linear%03d.png FHNmodel_torus_Z.varyBeta_linear.mp4")
+     # os.system("rm FHNmodel_torus_Z.varyBeta*.png") # clean up files
 
-
-    #print '\nConverting png files to animated gif (this maye take some time)...\n'
-    os.system("convert -delay 30 -loop 0 FHNmodel_torus_surf_u.*.png " + "FHNmodel_torus_outside_beta_09_R80.gif")
-    os.system("rm FHNmodel_torus_surf_u.*.png") # clean up files
-    os.system("animate FHNmodel_torus_outside_beta_09_R80.gif") # play animates gif
-
-
-
+if __name__ == '__main__':
+    if len(sys.argv) != 2:
+        print "Usage: " + sys.argv[0] + " <Program Arguments>"
+    else:
+        plot_FHNmodel_torus(sys.argv[1])
 
 
 
