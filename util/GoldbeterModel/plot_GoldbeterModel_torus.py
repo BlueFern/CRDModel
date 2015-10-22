@@ -133,7 +133,7 @@ def plot_GoldbeterModel_torus(programArguments):
 
     # Convert png to video mp4
     if varyBeta == 0:
-        os.system("ffmpeg -r 6 -i png/GoldbeterModel_torus_Z.beta" + beta + "%03d.png GoldbeterModel_torus_Z.beta" + beta + ".mp4")
+        os.system("ffmpeg -r 6 -i png/GoldbeterModel_torus_Z.beta" + beta + ".%03d.png GoldbeterModel_torus_Z.beta" + beta + ".mp4")
       # os.system("rm GoldbeterModel_torus_Z.*.png") # clean up files
     else:
         os.system("ffmpeg -r 6 -i png/GoldbeterModel_torus_Z.varyBeta_linear%03d.png GoldbeterModel_torus_Z.varyBeta_linear.mp4")

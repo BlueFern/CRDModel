@@ -2,6 +2,7 @@
 
 # imports
 import vtk
+import os
 import sys
 import lxml
 import lxml.etree
@@ -133,6 +134,9 @@ if __name__ == '__main__':
 
     tStepDict = dict()
 
+    # Create directory for each time step output vtp file
+    os.system("mkdir FHNstep")
+
     for tstep in range(nt):
         
         # Get the time at tstep
@@ -189,7 +193,7 @@ if __name__ == '__main__':
         if (includeAllVars == 1): torus.GetCellData().AddArray(inhibitorArray)    # other variable(s)
 
 
-        outputFileName = "FHNstep_" + repr(tstep).zfill(3) + ".vtp"
+        outputFileName = "FHNstep/FHNstep_" + repr(tstep).zfill(3) + ".vtp"
 
         tStepDict[time] = outputFileName
         

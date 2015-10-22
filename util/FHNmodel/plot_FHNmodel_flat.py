@@ -100,9 +100,9 @@ def plot_FHNmodel_flat(programArguments):
     
         # set string constants for output plots, current time, mesh size
         if varyBeta == 0:
-            pname = 'FHNmodel_flat_Z.beta' + beta + '.' + repr(tstep).zfill(3) + '.png'
+            pname = 'png/FHNmodel_flat_Z.beta' + beta + '.' + repr(tstep).zfill(3) + '.png'
         else:
-            pname = 'FHNmodel_flat_Z.varyBeta_linear' + repr(tstep).zfill(3) + '.png'
+            pname = 'png/FHNmodel_flat_Z.varyBeta_linear' + repr(tstep).zfill(3) + '.png'
 
         time = ((float(tstep)/float(nt)))*float(tFinal) # get time of output
         tstr = repr(float("{0:.1f}".format(time)))  # convert to string with 1 decimal place
@@ -130,13 +130,13 @@ def plot_FHNmodel_flat(programArguments):
         nxstr = repr(nx)
         nystr = repr(ny)
         title('Flat: u(x,y) at t = ' + tstr + ', mesh = ' + nxstr + 'x' + nystr)
-        savefig(pname, dpi=50)
+        savefig(pname, dpi=150)
         plt.close()
     
     
     # Convert png to video mp4
     if varyBeta == 0:
-        os.system("ffmpeg -r 6 -i png/FHNmodel_flat_Z.beta" + beta + "%03d.png FHNmodel_flat_Z.beta" + beta + ".mp4")
+        os.system("ffmpeg -r 6 -i png/FHNmodel_flat_Z.beta" + beta + ".%03d.png FHNmodel_flat_Z.beta" + beta + ".mp4")
       # os.system("rm GoldbeterModel_flat_Z.*.png") # clean up files
     else:
         os.system("ffmpeg -r 6 -i png/FHNmodel_flat_Z.varyBeta_linear%03d.png FHNmodel_flat_Z.varyBeta_linear.mp4")
