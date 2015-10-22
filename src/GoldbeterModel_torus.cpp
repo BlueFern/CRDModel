@@ -580,7 +580,7 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	}
 	// North face: no diffusion boundary i.e. Z_phiphi(theta, phi=2pi) = 0
 	j=nyl-1;
-	if (udata->je == udata->nx-1 && t<TBOUNDARY)
+	if (udata->je == udata->ny-1 && t<TBOUNDARY)
 		{
 			for (i=1; i<nxl-1; i++)
 			{
@@ -622,7 +622,7 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	i = 0;
 	j = nyl-1;
 	xx = XMIN + (udata->is+i)*(dx);
-	if (udata->je == udata->nx-1 && t<TBOUNDARY)
+	if (udata->je == udata->ny-1 && t<TBOUNDARY)
 		{
 			ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - udata->Wrecv[NVARS*j]) )/(2*dx)
 									+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + udata->Wrecv[NVARS*j]))/(dx*dx)
@@ -655,7 +655,7 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	i = nxl-1;
 	j = nyl-1;
 	xx = XMIN + (udata->is+i)*(dx);
-	if (udata->je == udata->nx-1 && t<TBOUNDARY)
+	if (udata->je == udata->ny-1 && t<TBOUNDARY)
 		{
 			ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(udata->Erecv[NVARS*j] - yarray[IDX(i-1,j)]) )/(2*dx)
 									+ Diff*( (1/(r*r))* (udata->Erecv[NVARS*j] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)

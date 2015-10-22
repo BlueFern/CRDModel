@@ -66,10 +66,6 @@ using namespace std;
 #define THREE RCONST(3.0)
 #define SURFACEWIDTH RCONST(20.0) 	// Width of the flat surface
 
-// Min and max values for when VARYBETA = 1
-#define BETAMIN 0.7
-#define BETAMAX 1.7
-
 // System parameters
 #define EPSILON 0.36			// Time scale separation of the two variables
 #define DIFF 0.12				// Diffusion coefficient
@@ -463,7 +459,8 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	int ierr = Exchange(y, udata);
 	if (check_flag(&ierr, "Exchange", 1)) return -1;
 
-	// iterate over subdomain interior, computing approximation to RHS
+	// Add diffusion term
+
 	realtype cu1 = Diff/dx/dx;			// D/delx^2
 	realtype cu2 = Diff/dy/dy;			// D/dely^2
 	realtype cu3 = -TWO*(cu1 + cu2);
@@ -502,7 +499,7 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	{
 		for (i=1; i<nxl-1; i++)
 		{
-			ydotarray[IDX(i,j)] = 0;
+			ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] - yarray[IDX(i,j)] + yarray[IDX(i+1,j)]) + 0;
 		}
 	}
 	else
@@ -516,18 +513,25 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	}
 	// North face
 	j=nyl-1;
-	for (i=1; i<nxl-1; i++)
+	if (udata->je == udata->ny-1 && t<TBOUNDARY)
 	{
-		ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + yarray[IDX(i+1,j)])
-						 + cu2*(yarray[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
-						 + cu3*yarray[IDX(i,j)];
+		ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] - yarray[IDX(i,j)] + yarray[IDX(i+1,j)]) + 0;
+	}
+	else
+	{
+		for (i=1; i<nxl-1; i++)
+		{
+			ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + yarray[IDX(i+1,j)])
+							 + cu2*(yarray[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
+							 + cu3*yarray[IDX(i,j)];
+		}
 	}
 	// South-West corner
 	i = 0;
 	j = 0;
 	if (udata->js == 0 && t<TBOUNDARY)
 	{
-		ydotarray[IDX(i,j)] = 0;
+		ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] - yarray[IDX(i,j)] + yarray[IDX(i+1,j)]) + 0;
 	}
 	else
 	{
@@ -538,16 +542,22 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	// North-West corner
 	i = 0;
 	j = nyl-1;
-	ydotarray[IDX(i,j)] = cu1*(udata->Wrecv[NVARS*j]   + yarray[IDX(i+1,j)])
-							   + cu2*(yarray[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
-							   + cu3*yarray[IDX(i,j)];
-
+	if (udata->je == udata->ny-1 && t<TBOUNDARY)
+	{
+		ydotarray[IDX(i,j)] = cu1*(udata->Wrecv[NVARS*j] - yarray[IDX(i,j)] + yarray[IDX(i+1,j)]) + 0;
+	}
+	else
+	{
+		ydotarray[IDX(i,j)] = cu1*(udata->Wrecv[NVARS*j]   + yarray[IDX(i+1,j)])
+								   + cu2*(yarray[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
+								   + cu3*yarray[IDX(i,j)];
+	}
 	// South-East corner
 	i = nxl-1;
 	j = 0;
 	if (udata->js == 0 && t<TBOUNDARY)
 	{
-		ydotarray[IDX(i,j)] = 0;
+		ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] - yarray[IDX(i,j)] + yarray[IDX(i+1,j)]) + 0;
 	}
 	else
 	{
@@ -559,10 +569,16 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	// North-East corner
 	i = nxl-1;
 	j = nyl-1;
-	ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + udata->Erecv[NVARS*j])
-							   + cu2*(yarray[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
-							   + cu3*yarray[IDX(i,j)];
-
+	if (udata->je == udata->ny-1 && t<TBOUNDARY)
+	{
+		ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] - yarray[IDX(i,j)] + udata->Erecv[NVARS*j]) + 0;
+	}
+	else
+	{
+		ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + udata->Erecv[NVARS*j])
+								   + cu2*(yarray[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
+								   + cu3*yarray[IDX(i,j)];
+	}
 	realtype b;
 
 	// Add other terms in equations

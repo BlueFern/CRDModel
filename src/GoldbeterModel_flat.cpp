@@ -247,7 +247,7 @@ int main(int argc, char* argv[])
 	// Initial problem output
 	bool outproc = (udata->rank == 0);
 	if (outproc) {
-		cout << "\n2D FHN model PDE problem on a torus:\n";
+		cout << "\n2D Goldbeter model PDE problem on a flat surface:\n";
 		cout << "   nprocs = " << udata->nprocs << "\n";
 		cout << "   nx = " << udata->nx << "\n";
 		cout << "   ny = " << udata->ny << "\n";
@@ -256,7 +256,7 @@ int main(int argc, char* argv[])
 		cout << "   Diff = " << udata->Diff << "\n";
 		cout << "   Tfinal = " << TFINAL << "\n";
 		cout << "   Output timesteps = " << OUTPUT_TIMESTEP << "\n";
-		cout << "   Surface length = " << SURFACELENGTH << "\n";
+		cout << "   Surface length = " << SURFACELENGTH << "\n";n
 		cout << "   Absorbing boundary turn off time = " << TBOUNDARY << "\n";
 		cout << "   Wavelength = " << WAVELENGTH << "\%\n";
 		cout << "   Wavewidth = " << WAVEWIDTH << "\%\n";
@@ -515,7 +515,7 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	{
 		for (i=1; i<nxl-1; i++)
 		{
-			ydotarray[IDX(i,j)] = 0;
+			ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] - yarray[IDX(i,j)] + yarray[IDX(i+1,j)]) + 0;
 		}
 	}
 	else
@@ -529,18 +529,25 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	}
 	// North face
 	j=nyl-1;
-	for (i=1; i<nxl-1; i++)
+	if (udata->je == udata->ny-1 && t<TBOUNDARY)
 	{
-		ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + yarray[IDX(i+1,j)])
-						 + cu2*(yarray[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
-						 + cu3*yarray[IDX(i,j)];
+		ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] - yarray[IDX(i,j)] + yarray[IDX(i+1,j)]) + 0;
+	}
+	else
+	{
+		for (i=1; i<nxl-1; i++)
+		{
+			ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + yarray[IDX(i+1,j)])
+							 + cu2*(yarray[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
+							 + cu3*yarray[IDX(i,j)];
+		}
 	}
 	// South-West corner
 	i = 0;
 	j = 0;
 	if (udata->js == 0 && t<TBOUNDARY)
 	{
-		ydotarray[IDX(i,j)] = 0;
+		ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] - yarray[IDX(i,j)] + yarray[IDX(i+1,j)]) + 0;
 	}
 	else
 	{
@@ -551,16 +558,22 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	// North-West corner
 	i = 0;
 	j = nyl-1;
-	ydotarray[IDX(i,j)] = cu1*(udata->Wrecv[NVARS*j]   + yarray[IDX(i+1,j)])
-							   + cu2*(yarray[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
-							   + cu3*yarray[IDX(i,j)];
-
+	if (udata->je == udata->ny-1 && t<TBOUNDARY)
+	{
+		ydotarray[IDX(i,j)] = cu1*(udata->Wrecv[NVARS*j] - yarray[IDX(i,j)] + yarray[IDX(i+1,j)]) + 0;
+	}
+	else
+	{
+		ydotarray[IDX(i,j)] = cu1*(udata->Wrecv[NVARS*j]   + yarray[IDX(i+1,j)])
+								   + cu2*(yarray[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
+								   + cu3*yarray[IDX(i,j)];
+	}
 	// South-East corner
 	i = nxl-1;
 	j = 0;
 	if (udata->js == 0 && t<TBOUNDARY)
 	{
-		ydotarray[IDX(i,j)] = 0;
+		ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] - yarray[IDX(i,j)] + yarray[IDX(i+1,j)]) + 0;
 	}
 	else
 	{
@@ -572,10 +585,16 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	// North-East corner
 	i = nxl-1;
 	j = nyl-1;
-	ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + udata->Erecv[NVARS*j])
-							   + cu2*(yarray[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
-							   + cu3*yarray[IDX(i,j)];
-
+	if (udata->je == udata->ny-1 && t<TBOUNDARY)
+	{
+		ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] - yarray[IDX(i,j)] + udata->Erecv[NVARS*j]) + 0;
+	}
+	else
+	{
+		ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + udata->Erecv[NVARS*j])
+								   + cu2*(yarray[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
+								   + cu3*yarray[IDX(i,j)];
+	}
 	realtype b;
 
 		// Add other terms in equations
