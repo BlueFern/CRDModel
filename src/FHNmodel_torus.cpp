@@ -539,117 +539,59 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	}
 	// South face: no diffusion boundary i.e. Z_phiphi(theta, phi=0) = 0, if js = 0 and time < TBOUNDARY, so that no backwards travelling waves occur
 	j=0;
-	if (udata->js == 0 && t<TBOUNDARY)
+	for (i=1; i<nxl-1; i++)
 	{
-		for (i=1; i<nxl-1; i++)
-		{
-			xx = XMIN + (udata->is+i)*(dx);
+		xx = XMIN + (udata->is+i)*(dx);
 
-			ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - yarray[IDX(i-1,j)]) )/(2*dx)
-									+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
-									+ 0;
-		}
+		ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - yarray[IDX(i-1,j)]) )/(2*dx)
+							+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
+							+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (yarray[IDX(i,j+1)] - 2*yarray[IDX(i,j)] + udata->Srecv[NVARS*i]))/(dy*dy);
 	}
-	else
-	{
-		for (i=1; i<nxl-1; i++)
-		{
-			xx = XMIN + (udata->is+i)*(dx);
 
-			ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - yarray[IDX(i-1,j)]) )/(2*dx)
-								+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
-								+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (yarray[IDX(i,j+1)] - 2*yarray[IDX(i,j)] + udata->Srecv[NVARS*i]))/(dy*dy);
-		}
-	}
 	// North face: no diffusion boundary i.e. Z_phiphi(theta, phi=2pi) = 0
 	j=nyl-1;
-	if (udata->je == udata->ny-1 && t<TBOUNDARY)
-		{
-			for (i=1; i<nxl-1; i++)
-			{
-				xx = XMIN + (udata->is+i)*(dx);
+	for (i=1; i<nxl-1; i++)
+	{
+		xx = XMIN + (udata->is+i)*(dx);
 
-				ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - yarray[IDX(i-1,j)]) )/(2*dx)
-									+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
-									+ 0;
-			}
-		}
-		else
-		{
-			for (i=1; i<nxl-1; i++)
-			{
-				xx = XMIN + (udata->is+i)*(dx);
+		ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - yarray[IDX(i-1,j)]) )/(2*dx)
+							+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
+							+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (udata->Nrecv[NVARS*i] - 2*yarray[IDX(i,j)] + yarray[IDX(i,j-1)]))/(dy*dy);
+	}
 
-				ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - yarray[IDX(i-1,j)]) )/(2*dx)
-									+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
-									+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (udata->Nrecv[NVARS*i] - 2*yarray[IDX(i,j)] + yarray[IDX(i,j-1)]))/(dy*dy);
-			}
-		}
 	// South-West corner
 	i = 0;
 	j = 0;
 	xx = XMIN + (udata->is+i)*(dx);
-	if (udata->js == 0 && t<TBOUNDARY)
-	{
-		ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - udata->Wrecv[NVARS*j]) )/(2*dx)
-								+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + udata->Wrecv[NVARS*j]))/(dx*dx)
-								+ 0;
-	}
-	else
-	{
-		ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - udata->Wrecv[NVARS*j]) )/(2*dx)
+	ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - udata->Wrecv[NVARS*j]) )/(2*dx)
 						+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + udata->Wrecv[NVARS*j]))/(dx*dx)
 						+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (yarray[IDX(i,j+1)] - 2*yarray[IDX(i,j)] + udata->Srecv[NVARS*i]))/(dy*dy);
-	}
+
 	// North-West corner
 	i = 0;
 	j = nyl-1;
 	xx = XMIN + (udata->is+i)*(dx);
-	if (udata->je == udata->ny-1 && t<TBOUNDARY)
-		{
-			ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - udata->Wrecv[NVARS*j]) )/(2*dx)
-									+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + udata->Wrecv[NVARS*j]))/(dx*dx)
-									+ 0;
-		}
-		else
-		{
-			ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - udata->Wrecv[NVARS*j]) )/(2*dx)
-									+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + udata->Wrecv[NVARS*j]))/(dx*dx)
-									+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (udata->Nrecv[NVARS*i] - 2*yarray[IDX(i,j)] + yarray[IDX(i,j-1)]))/(dy*dy);
-		}
+	ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(yarray[IDX(i+1,j)] - udata->Wrecv[NVARS*j]) )/(2*dx)
+						+ Diff*( (1/(r*r))* (yarray[IDX(i+1,j)] - 2*yarray[IDX(i,j)] + udata->Wrecv[NVARS*j]))/(dx*dx)
+						+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (udata->Nrecv[NVARS*i] - 2*yarray[IDX(i,j)] + yarray[IDX(i,j-1)]))/(dy*dy);
+
 	// South-East corner
 	i = nxl-1;
 	j = 0;
 	xx = XMIN + (udata->is+i)*(dx);
-	if (udata->js == 0 && t<TBOUNDARY)
-	{
-		ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(udata->Erecv[NVARS*j] - yarray[IDX(i-1,j)]) )/(2*dx)
-								+ Diff*( (1/(r*r))* (udata->Erecv[NVARS*j] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
-								+ 0;
-	}
-	else
-	{
-		ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(udata->Erecv[NVARS*j] - yarray[IDX(i-1,j)]) )/(2*dx)
+	ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(udata->Erecv[NVARS*j] - yarray[IDX(i-1,j)]) )/(2*dx)
 						+ Diff*( (1/(r*r))* (udata->Erecv[NVARS*j] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
 						+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (yarray[IDX(i,j+1)] - 2*yarray[IDX(i,j)] + udata->Srecv[NVARS*i]))/(dy*dy);
-	}
+
 
 	// North-East corner
 	i = nxl-1;
 	j = nyl-1;
 	xx = XMIN + (udata->is+i)*(dx);
-	if (udata->je == udata->ny-1 && t<TBOUNDARY)
-		{
-			ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(udata->Erecv[NVARS*j] - yarray[IDX(i-1,j)]) )/(2*dx)
-									+ Diff*( (1/(r*r))* (udata->Erecv[NVARS*j] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
-									+ 0;
-		}
-		else
-		{
-			ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(udata->Erecv[NVARS*j] - yarray[IDX(i-1,j)]) )/(2*dx)
-									+ Diff*( (1/(r*r))* (udata->Erecv[NVARS*j] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
-									+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (udata->Nrecv[NVARS*i] - 2*yarray[IDX(i,j)] + yarray[IDX(i,j-1)]))/(dy*dy);
-		}
+	ydotarray[IDX(i,j)] = Diff*( (-sin(xx)/(r*(R+r*cos(xx))))*(udata->Erecv[NVARS*j] - yarray[IDX(i-1,j)]) )/(2*dx)
+						+ Diff*( (1/(r*r))* (udata->Erecv[NVARS*j] - 2*yarray[IDX(i,j)] + yarray[IDX(i-1,j)]))/(dx*dx)
+						+ Diff*( (1/(((R+r*cos(xx)))*((R+r*cos(xx)))))* (udata->Nrecv[NVARS*i] - 2*yarray[IDX(i,j)] + yarray[IDX(i,j-1)]))/(dy*dy);
+
 
 	realtype b;
 
@@ -672,11 +614,30 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 			realtype u = yarray[IDX(i,j)];
 			realtype v = yarray[IDX(i,j)+1];
 
-			// u variable: du/dt = 3u - u^3 - v + Diff
-			ydotarray[IDX(i,j)] += 3.0*u - (u*u*u) - v;
+			// If we are on the north or south boundary of the entire domain and t<TBOUNDARY, set u_t = 0 to simulate
+			// Dirichlet boundary conditions with values equal to the initial conditions
 
-			// v variable: dv/dt = eps(u + beta)
-			ydotarray[IDX(i,j)+1] += EPSILON*(u + b);
+			// North boundary of the domain
+			if (udata->je == udata->ny-1 && t<TBOUNDARY && j == nyl-1)
+			{
+				ydotarray[IDX(i,j)] = 0; 	// u
+				ydotarray[IDX(i,j)+1] = 0;  // v
+			}
+			// South boundary of the domain
+			else if (udata->js == 0 && t<TBOUNDARY && j == 0)
+			{
+				ydotarray[IDX(i,j)] = 0; 	// u
+				ydotarray[IDX(i,j)+1] = 0;  // v
+			}
+			else
+			{
+				// u variable: du/dt = 3u - u^3 - v + Diff
+				ydotarray[IDX(i,j)] += 3.0*u - (u*u*u) - v;
+
+				// v variable: dv/dt = eps(u + beta)
+				ydotarray[IDX(i,j)+1] += EPSILON*(u + b);
+			}
+
 		}
 	}
 

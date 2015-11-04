@@ -256,7 +256,7 @@ int main(int argc, char* argv[])
 		cout << "   Diff = " << udata->Diff << "\n";
 		cout << "   Tfinal = " << TFINAL << "\n";
 		cout << "   Output timesteps = " << OUTPUT_TIMESTEP << "\n";
-		cout << "   Surface length = " << SURFACELENGTH << "\n";n
+		cout << "   Surface length = " << SURFACELENGTH << "\n";
 		cout << "   Absorbing boundary turn off time = " << TBOUNDARY << "\n";
 		cout << "   Wavelength = " << WAVELENGTH << "\%\n";
 		cout << "   Wavewidth = " << WAVEWIDTH << "\%\n";
@@ -511,90 +511,50 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	}
 	// South face: absorbing boundary at phi = 0, if js = 0 and time < TBOUNDARY, so that no backwards travelling waves occur
 	j=0;
-	if (udata->js == 0 && t<TBOUNDARY)
+	for (i=1; i<nxl-1; i++)
 	{
-		for (i=1; i<nxl-1; i++)
-		{
-			ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] - yarray[IDX(i,j)] + yarray[IDX(i+1,j)]) + 0;
-		}
-	}
-	else
-	{
-		for (i=1; i<nxl-1; i++)
-		{
-			ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + yarray[IDX(i+1,j)])
-							 + cu2*(udata->Srecv[NVARS*i]   + yarray[IDX(i,j+1)])
-							 + cu3*yarray[IDX(i,j)];
-		}
+		ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + yarray[IDX(i+1,j)])
+						 + cu2*(udata->Srecv[NVARS*i]   + yarray[IDX(i,j+1)])
+						 + cu3*yarray[IDX(i,j)];
 	}
 	// North face
 	j=nyl-1;
-	if (udata->je == udata->ny-1 && t<TBOUNDARY)
+	for (i=1; i<nxl-1; i++)
 	{
-		ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] - yarray[IDX(i,j)] + yarray[IDX(i+1,j)]) + 0;
+		ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + yarray[IDX(i+1,j)])
+						 + cu2*(yarray[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
+						 + cu3*yarray[IDX(i,j)];
 	}
-	else
-	{
-		for (i=1; i<nxl-1; i++)
-		{
-			ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + yarray[IDX(i+1,j)])
-							 + cu2*(yarray[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
-							 + cu3*yarray[IDX(i,j)];
-		}
-	}
+
 	// South-West corner
 	i = 0;
 	j = 0;
-	if (udata->js == 0 && t<TBOUNDARY)
-	{
-		ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] - yarray[IDX(i,j)] + yarray[IDX(i+1,j)]) + 0;
-	}
-	else
-	{
-		ydotarray[IDX(i,j)] = cu1*(udata->Wrecv[NVARS*j] + yarray[IDX(i+1,j)])
+	ydotarray[IDX(i,j)] = cu1*(udata->Wrecv[NVARS*j] + yarray[IDX(i+1,j)])
 						   + cu2*(udata->Srecv[NVARS*i] + yarray[IDX(i,j+1)])
 						   + cu3*yarray[IDX(i,j)];
-	}
+
 	// North-West corner
 	i = 0;
 	j = nyl-1;
-	if (udata->je == udata->ny-1 && t<TBOUNDARY)
-	{
-		ydotarray[IDX(i,j)] = cu1*(udata->Wrecv[NVARS*j] - yarray[IDX(i,j)] + yarray[IDX(i+1,j)]) + 0;
-	}
-	else
-	{
-		ydotarray[IDX(i,j)] = cu1*(udata->Wrecv[NVARS*j]   + yarray[IDX(i+1,j)])
-								   + cu2*(yarray[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
-								   + cu3*yarray[IDX(i,j)];
-	}
+	ydotarray[IDX(i,j)] = cu1*(udata->Wrecv[NVARS*j] + yarray[IDX(i+1,j)])
+						   + cu2*(yarray[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
+						   + cu3*yarray[IDX(i,j)];
+
 	// South-East corner
 	i = nxl-1;
 	j = 0;
-	if (udata->js == 0 && t<TBOUNDARY)
-	{
-		ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] - yarray[IDX(i,j)] + yarray[IDX(i+1,j)]) + 0;
-	}
-	else
-	{
-		ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + udata->Erecv[NVARS*j])
-									   + cu2*(udata->Srecv[NVARS*i]   + yarray[IDX(i,j+1)])
-									   + cu3*yarray[IDX(i,j)];
-	}
+	ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + udata->Erecv[NVARS*j])
+							+ cu2*(udata->Srecv[NVARS*i] + yarray[IDX(i,j+1)])
+							+ cu3*yarray[IDX(i,j)];
+
 
 	// North-East corner
 	i = nxl-1;
 	j = nyl-1;
-	if (udata->je == udata->ny-1 && t<TBOUNDARY)
-	{
-		ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] - yarray[IDX(i,j)] + udata->Erecv[NVARS*j]) + 0;
-	}
-	else
-	{
-		ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + udata->Erecv[NVARS*j])
-								   + cu2*(yarray[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
-								   + cu3*yarray[IDX(i,j)];
-	}
+	ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + udata->Erecv[NVARS*j])
+						   + cu2*(yarray[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
+						   + cu3*yarray[IDX(i,j)];
+
 	realtype b;
 
 		// Add other terms in equations
@@ -623,11 +583,26 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 				realtype v2 = VM2 * pow(Z,n) / ( pow(K2,n) + pow(Z,n) );
 				realtype v3 = VM3 * pow(Y,m) * pow(Z,p) / ( (pow(KR,m) + pow(Y,m)) * (pow(KA,p) + pow(Z,p)) );
 
-				// Z
-				ydotarray[IDX(i,j)] += v0 + v1*b - v2 + v3 + kf*Y - k*Z;
+				// If we are on the north or south boundary of the entire domain and t<TBOUNDARY, set u_t = 0 to simulate
+				// Dirichlet boundary conditions with values equal to the initial conditions
 
-				// Y
-				ydotarray[IDX(i,j)+1] += v2 - v3 - kf*Y;
+				// North boundary of the domain
+				if (udata->je == udata->ny-1 && t<TBOUNDARY && j == nyl-1)
+				{
+					ydotarray[IDX(i,j)] = 0; 	// Z
+					ydotarray[IDX(i,j)+1] = 0;  // Y
+				}
+				// South boundary of the domain
+				else if (udata->js == 0 && t<TBOUNDARY && j == 0)
+				{
+					ydotarray[IDX(i,j)] = 0; 	// Z
+					ydotarray[IDX(i,j)+1] = 0;  // Y
+				}
+				else
+				{
+					ydotarray[IDX(i,j)] += v0 + v1*b - v2 + v3 + kf*Y - k*Z;  // Z
+					ydotarray[IDX(i,j)+1] += v2 - v3 - kf*Y;				  // Y
+				}
 			}
 		}
 
