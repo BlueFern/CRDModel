@@ -89,7 +89,7 @@ def GenCurvatureCoupling(programArguments):
         eta, theta_i, a = PTtoETA(phi, theta, r, R)
         
         # Coupling strength
-        resultC = math.pow((math.cosh(eta) - np.cos(theta_i)),2)/math.pow(a,2) 
+        resultC = 10*math.pow((math.cosh(eta) - np.cos(theta_i)),2)/math.pow(a,2)   # Not sure why 10 is there but is necessary
         
         gaussianCurvature.InsertNextValue(resultG)
         couplingStrength.InsertNextValue(resultC)
