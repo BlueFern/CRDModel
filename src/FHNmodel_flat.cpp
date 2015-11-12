@@ -68,7 +68,6 @@ using namespace std;
 
 // System parameters
 #define EPSILON 0.36			// Time scale separation of the two variables
-#define DIFF 0.12				// Diffusion coefficient
 
 // Number of variables in the system
 #define NVARS 2
@@ -77,6 +76,7 @@ using namespace std;
 double XMIN, XMAX, YMIN, YMAX;
 
 // Initialise parameters, found in ini file
+double DIFF = 0.0;					// Diffusion parameter - default is 0.12
 double BETA = 0.0;					// Bifurcation parameter - system is oscillatory for BETA < 1, stable for BETA > 1
 double SURFACELENGTH = 0.0;	 		// Length of the flat surface, usually 80 or 40 to match with the corresponding torus
 double WAVELENGTH = 0.0;			// Initial wave segment length as a percentage of total length of torus (phi)
@@ -153,6 +153,7 @@ int main(int argc, char* argv[])
 	// Obtain model parameters from ini file
 	boost::property_tree::ptree pt;
 	boost::property_tree::ini_parser::read_ini(argv[1], pt);
+	DIFF = pt.get<double>("Parameters.diffusion");
 	BETA = pt.get<double>("Parameters.beta");
 	SURFACELENGTH = pt.get<double>("Parameters.majorCirc");		// This is the length of the flat surface
 	WAVELENGTH = pt.get<double>("Parameters.waveLength");

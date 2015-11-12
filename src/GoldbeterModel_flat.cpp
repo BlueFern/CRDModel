@@ -84,8 +84,6 @@ using namespace std;
 #define n 2.0
 #define p 4.0
 
-// Diffusion coefficient
-#define DIFF 0.12
 
 // Number of variables in the system
 #define NVARS 2
@@ -94,6 +92,7 @@ using namespace std;
 double XMIN, XMAX, YMIN, YMAX;
 
 // Initialise parameters, found in ini file
+double DIFF = 0.0;					// Diffusion parameter - default is 0.12
 double BETA = 0.0;					// Bifurcation parameter - system is oscillatory for BETA < 1, stable for BETA > 1
 double SURFACELENGTH = 0.0;	 		// Length of the flat surface, usually 80 or 40 to match with the corresponding torus
 double WAVELENGTH = 0.0;			// Initial wave segment length as a percentage of total length of torus (phi)
@@ -105,6 +104,8 @@ double TFINAL = 0.0;				// Time to run simulation
 int NX = 0;							// Mesh size in theta direction
 int INCLUDEALLVARS = 0;				// Bool/int for whether we write all variables to file (true=1) or only the main activator variable u (false=0)
 int VARYBETA = 0;					// Bool/int for whether to vary beta over the surface of the torus (true=1) or keep it constant (false=0)
+int SYMMETRICIC = 0;				// Bool/int for whether to have a symmetric initial perturbation centred on either the inside or outside of the torus, or an alternative IC
+int JUSTDIFFUSION = 0;				// Bool/int for whether to have no reaction terms (1) or normal (0)
 
 // user data structure
 typedef struct {
@@ -168,6 +169,7 @@ int main(int argc, char* argv[])
 	// Obtain model parameters from ini file
 	boost::property_tree::ptree pt;
 	boost::property_tree::ini_parser::read_ini(argv[1], pt);
+	DIFF = pt.get<double>("Parameters.diffusion");
 	BETA = pt.get<double>("Parameters.beta");
 	SURFACELENGTH = pt.get<double>("Parameters.majorCirc");		// This is the length of the flat surface
 	WAVELENGTH = pt.get<double>("Parameters.waveLength");
@@ -178,10 +180,12 @@ int main(int argc, char* argv[])
 	NX = pt.get<int>("Parameters.thetaMesh");				// This is the mesh of the X direction
 	INCLUDEALLVARS = pt.get<int>("System.includeAllVars");
 	VARYBETA = pt.get<int>("System.varyBeta");
+	SYMMETRICIC = pt.get<int>("System.symmetricIC");
+	JUSTDIFFUSION = pt.get<int>("System.justDiffusion");
 
-	XMIN = 0.0;				                // grid boundaries in theta
+	XMIN = 0.0;				                // grid boundaries in x
 	XMAX = SURFACEWIDTH - XMIN;
-	YMIN = 0.0;			    	    		// grid boundaries in phi
+	YMIN = 0.0;			    	    		// grid boundaries in y
 	YMAX = SURFACELENGTH - YMIN;
 
 	// general problem parameters
@@ -288,37 +292,73 @@ int main(int argc, char* argv[])
 	ydata = N_VGetArrayPointer(y);
 	for (j=0; j<udata->nyl; j++)
 	{
-		yy = YMIN + (udata->js+j)*(udata->dy);						// Actual x values
+		yy = YMIN + (udata->js+j)*(udata->dy);						// Actual y values
 
 		for (i=0; i<udata->nxl; i++)
 		{
 			xx = XMIN + (udata->is+i)*(udata->dx);					// Actual x values
 
-			if (VARYBETA == 1)
+			if (VARYBETA == 0)
 			{
-				ydata[IDX(i,j)] = 0.4;
-				ydata[IDX(i,j) + 1] = 1.6;
+				if (SYMMETRICIC ==  1)
+				{
+					// Set initial wave segment symmetric
+					//if ( xx >= WaveXMIN && xx <= WaveXMAX && yy >= WaveLength && yy <= (2.0*WaveLength) )
+				    if ( xx >= WaveXMIN && xx <= WaveXMAX && yy >= 2*WaveLength && yy <= (3.0*WaveLength) )
+					{
+						ydata[IDX(i,j)] = Zs + 1;
+						ydata[IDX(i,j) + 1] = Ys + 1;
+					}
+					else
+					{
+						// Set rest of area to stable
+						ydata[IDX(i,j)] = Zs;
+						ydata[IDX(i,j) + 1] = Ys;
+
+					}
+				}
+				else if (SYMMETRICIC == 0)
+				{
+					// Set initial wave segment off centre (not symmetric)
+//						if ( xx >= (WaveXMIN+(WaveXMAX-WaveXMIN)/2) && xx <= (WaveXMAX+(WaveXMAX-WaveXMIN)/2) && yy >= WaveLength && yy <= (2.0*WaveLength) )
+//						{
+//							ydata[IDX(i,j)] = Zs + 1;{
+//							ydata[IDX(i,j) + 1] = Ys + 1;
+//						}
+
+					// Double circle IC
+//						double r = PI/4, xr1 = PI-PI/5, xr2 = PI+PI/5, yr = 2*r;
+//						if (((pow(xx-xr1,2)+pow(yy-yr,2)) <= pow(r,2)) || ((pow(xx-xr2,2)+pow(yy-yr,2)) <= pow(r,2)))
+//						{
+//							ydata[IDX(i,j)] = Zs + 1;
+//							ydata[IDX(i,j) + 1] = Ys + 1;
+//						}
+
+					// Set initial wave segment as a circle with centre (xr, yr) and radius r
+					double r = 20/8, xr = 10, yr = 4*r;
+					if ((pow(xx-xr,2)+pow(yy-yr,2)) <= pow(r,2))
+					{
+						ydata[IDX(i,j)] = Zs + 1;
+						ydata[IDX(i,j) + 1] = Ys + 1;
+					}
+					else
+					{
+						// Set rest of area to stable
+						ydata[IDX(i,j)] = Zs;
+						ydata[IDX(i,j) + 1] = Ys;
+
+					}
+				}
+
 			}
 			else
 			{
-				// Set initial wave segment
-				if ( xx >= WaveXMIN && xx <= WaveXMAX && yy >= WaveLength && yy <= (2.0*WaveLength) )
-				{
-					// Set perturbed wave segment to higher initial values
-					ydata[IDX(i,j)] = Zs + 1;
-					ydata[IDX(i,j) + 1] = Ys + 0.5;
-				}
-				else
-				{
-					// Set rest of area to stable u,v
-					ydata[IDX(i,j)] = Zs;
-					ydata[IDX(i,j) + 1] = Ys;
-
-				}
+				// If we vary beta over torus, set all of surface to physiological ICs (taken from Goldbeter paper)
+				ydata[IDX(i,j)] = 0.4;
+				ydata[IDX(i,j)+1] = 1.6;
 			}
 		}
 	}
-
 	arkode_mem = ARKodeCreate();                       // Create the solver memory
 	if (check_flag((void *) arkode_mem, "ARKodeCreate", 0)) return 1;
 
@@ -583,25 +623,28 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 				realtype v2 = VM2 * pow(Z,n) / ( pow(K2,n) + pow(Z,n) );
 				realtype v3 = VM3 * pow(Y,m) * pow(Z,p) / ( (pow(KR,m) + pow(Y,m)) * (pow(KA,p) + pow(Z,p)) );
 
-				// If we are on the north or south boundary of the entire domain and t<TBOUNDARY, set u_t = 0 to simulate
-				// Dirichlet boundary conditions with values equal to the initial conditions
+				if (JUSTDIFFUSION == 0)
+				{
+					// If we are on the north or south boundary of the entire domain and t<TBOUNDARY, set u_t = 0 to simulate
+					// Dirichlet boundary conditions with values equal to the initial conditions
 
-				// North boundary of the domain
-				if (udata->je == udata->ny-1 && t<TBOUNDARY && j == nyl-1)
-				{
-					ydotarray[IDX(i,j)] = 0; 	// Z
-					ydotarray[IDX(i,j)+1] = 0;  // Y
-				}
-				// South boundary of the domain
-				else if (udata->js == 0 && t<TBOUNDARY && j == 0)
-				{
-					ydotarray[IDX(i,j)] = 0; 	// Z
-					ydotarray[IDX(i,j)+1] = 0;  // Y
-				}
-				else
-				{
-					ydotarray[IDX(i,j)] += v0 + v1*b - v2 + v3 + kf*Y - k*Z;  // Z
-					ydotarray[IDX(i,j)+1] += v2 - v3 - kf*Y;				  // Y
+					// North boundary of the domain
+					if (udata->je == udata->ny-1 && t<TBOUNDARY && j == nyl-1)
+					{
+						ydotarray[IDX(i,j)] = 0; 	// Z
+						ydotarray[IDX(i,j)+1] = 0;  // Y
+					}
+					// South boundary of the domain
+					else if (udata->js == 0 && t<TBOUNDARY && j == 0)
+					{
+						ydotarray[IDX(i,j)] = 0; 	// Z
+						ydotarray[IDX(i,j)+1] = 0;  // Y
+					}
+					else
+					{
+						ydotarray[IDX(i,j)] += v0 + v1*b - v2 + v3 + kf*Y - k*Z;  // Z
+						ydotarray[IDX(i,j)+1] += v2 - v3 - kf*Y;				  // Y
+					}
 				}
 			}
 		}
