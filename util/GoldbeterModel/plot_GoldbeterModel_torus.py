@@ -139,13 +139,14 @@ def plot_GoldbeterModel_torus(programArguments):
         os.system("ffmpeg -r 6 -i png/GoldbeterModel_torus_Z.varyBeta_linear%03d.png GoldbeterModel_torus_Z.varyBeta_linear.mp4")
      # os.system("rm GoldbeterModel_torus_Z.varyBeta*.png") # clean up files
 
+    print "\npng to mp4 conversion complete!"
+
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:
         print "Usage: " + sys.argv[0] + " <Program Arguments>"
     else:
         plot_GoldbeterModel_torus(sys.argv[1])
-
 
 
 

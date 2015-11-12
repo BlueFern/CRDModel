@@ -218,4 +218,4 @@ if __name__ == '__main__':
     outXMLFile = open('GBtimeSteps.pvd', 'w')
     pvdDoc.write(outXMLFile, encoding='iso-8859-1', xml_declaration=True, pretty_print=True, method = 'xml')
 
-
+    print "\nMapping to torus complete!"

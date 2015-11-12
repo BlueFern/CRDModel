@@ -138,6 +138,8 @@ def plot_FHNmodel_torus(programArguments):
         os.system("ffmpeg -r 6 -i png/FHNmodel_torus_Z.varyBeta_linear%03d.png FHNmodel_torus_Z.varyBeta_linear.mp4")
      # os.system("rm FHNmodel_torus_Z.varyBeta*.png") # clean up files
 
+    print "\npng to mp4 conversion complete!"
+
 if __name__ == '__main__':
     if len(sys.argv) != 2:
         print "Usage: " + sys.argv[0] + " <Program Arguments>"
