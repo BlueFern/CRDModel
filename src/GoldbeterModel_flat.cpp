@@ -353,9 +353,23 @@ int main(int argc, char* argv[])
 			}
 			else
 			{
-				// If we vary beta over torus, set all of surface to physiological ICs (taken from Goldbeter paper)
-				ydata[IDX(i,j)] = 0.4;
-				ydata[IDX(i,j)+1] = 1.6;
+				// If we vary beta over flat surface, set all of surface to physiological ICs (taken from Goldbeter paper)
+//				ydata[IDX(i,j)] = 0.4;
+//				ydata[IDX(i,j)+1] = 1.6;
+
+				// Set initial wave segment off centre (not symmetric)
+				if ( xx >= (10-4.5) && xx <= (10+2.5) && yy >= SURFACELENGTH*0.5 && yy <= SURFACELENGTH*0.75)
+				{
+					ydata[IDX(i,j)] = 1.4;
+					ydata[IDX(i,j) + 1] = 2.6;
+				}
+				else
+				{
+					// Set rest of area to stable
+					ydata[IDX(i,j)] = 0.4;
+					ydata[IDX(i,j) + 1] = 1.6;
+
+				}
 			}
 		}
 	}

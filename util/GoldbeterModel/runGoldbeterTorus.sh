@@ -9,4 +9,4 @@ time mpirun -np 4 ~/Documents/Research/CRDModel.x64/GoldbeterModel_torus ~/Docum
 time python ~/Documents/Research/CRDModel/util/GoldbeterModel/plot_GoldbeterModel_torus.py ~/Documents/Research/CRDModel/data/GoldbeterModelArgs.ini
 
 # Map the solution onto a torus
-time python ~/Documents/Research/CRDModel/util/GoldbeterModel/MapOutputToTorus.py ~/Documents/Research/CRDModel/data/GoldbeterModelArgs.ini
+#time python ~/Documents/Research/CRDModel/util/GoldbeterModel/MapOutputToTorus.py ~/Documents/Research/CRDModel/data/GoldbeterModelArgs.ini

@@ -24,4 +24,4 @@ title('Coupling Strength');
 xlim([0 2*pi]);
 %hold off
 legend('R=40','R=80','Flat');
-xlabel('theta')
+xlabel('$\theta$','Interpreter','LaTex')
