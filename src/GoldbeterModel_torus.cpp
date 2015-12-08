@@ -318,7 +318,7 @@ int main(int argc, char* argv[])
 		{
 			xx = XMIN + (udata->is+i)*(udata->dx);					// Actual x values
 
-			if (VARYBETA == 0)
+			if (VARYBETA != 1)
 			{
 				if (WaveInside == 1)
 				{
@@ -327,7 +327,7 @@ int main(int argc, char* argv[])
 						// Set initial wave segment symmetric
 						//if ( xx >= WaveXMIN && xx <= WaveXMAX )
 						//if ( xx >= WaveXMIN && xx <= WaveXMAX && yy >= WaveLength && yy <= (2.0*WaveLength) )
-						if ( xx >= WaveXMIN && xx <= WaveXMAX && yy >= 2*WaveLength && yy <= (3.0*WaveLength) )
+						if ( xx >= WaveXMIN && xx <= WaveXMAX && yy >= 0.1 && yy <= (0.1+WaveLength) )
 						{
 							ydata[IDX(i,j)] = Zs + 1;
 							ydata[IDX(i,j) + 1] = Ys + 1;
@@ -408,7 +408,7 @@ int main(int argc, char* argv[])
 					}
 				}
 			}
-			else
+			else if (VARYBETA == 1)
 			{
 				// If we vary beta over torus, set all of surface to physiological ICs (taken from Goldbeter paper)
 //				ydata[IDX(i,j)] = 0.4;
@@ -416,18 +416,21 @@ int main(int argc, char* argv[])
 
 				// Set initial wave segment off centre (not symmetric)
 				//if ( xx >= PI/4 && xx <= (PI+PI/4) && yy >= PI && yy <= (PI+PI/2) )
-				if ( xx >= (PI-PI/3) && xx <= (PI+PI/3) && yy >= PI && yy <= (PI+PI/2) )
-				{
-					ydata[IDX(i,j)] = 1.4;
-					ydata[IDX(i,j) + 1] = 2.6;
-				}
-				else
-				{
-					// Set rest of area to stable
-					ydata[IDX(i,j)] = 0.4;
-					ydata[IDX(i,j) + 1] = 1.6;
+//				if ( xx >= (PI-PI/3) && xx <= (PI+PI/3) && yy >= PI && yy <= (PI+PI/2) )
+//				{
+//					ydata[IDX(i,j)] = 1.4;
+//					ydata[IDX(i,j) + 1] = 2.6;
+//				}
+//				else
+//				{
+//					// Set rest of area to stable
+//					ydata[IDX(i,j)] = 0.4;
+//					ydata[IDX(i,j) + 1] = 1.6;
+//				}
 
-				}
+				// Set random ICs
+				ydata[IDX(i,j)] = (float)rand()/RAND_MAX*2.0;
+				ydata[IDX(i,j) + 1] = (float)rand()/RAND_MAX*2.0;
 			}
 		}
 	}
@@ -690,19 +693,32 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	{
 		yy = YMIN + (udata->js+j)*(udata->dy);
 
-		if (VARYBETA == 0)
-		{
-			b = BETA;
-		}
-		else
-		{
-			b = BETAMIN + yy*(BETAMAX - BETAMIN)/(YMAX - YMIN);
-		}
-
-
 		for (i=0; i<nxl; i++)
 		{
 			xx = XMIN + (udata->is+i)*(udata->dx);
+
+			if (VARYBETA == 0)
+			{
+				b = BETA;
+			}
+			else if (VARYBETA == 1)
+			{
+				// beta varying linearly from BETAMIN to BETAMAX
+				b = BETAMIN + yy*(BETAMAX - BETAMIN)/(YMAX - YMIN);
+			}
+			else if (VARYBETA == 2)
+			{
+				// beta set to BETA everywhere but in a square in the centre (nonexcitable)
+				if ( xx >= PI/2 && xx <= 3*PI/2 && yy >= PI && yy <= (PI+PI/8) )
+				{
+					b = 0.1;
+				}
+				else
+				{
+					b = BETA;
+				}
+			}
+
 
 			realtype Z = yarray[IDX(i,j)];
 			realtype Y = yarray[IDX(i,j)+1];

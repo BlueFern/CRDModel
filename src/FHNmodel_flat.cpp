@@ -279,25 +279,25 @@ int main(int argc, char* argv[])
 		{
 			xx = XMIN + (udata->is+i)*(udata->dx);					// Actual x values
 
-			if (VARYBETA == 1)
-			{
-				ydata[IDX(i,j)] = 1;
-				ydata[IDX(i,j) + 1] = 1;
-			}
-			else
+//			if (VARYBETA == 1)
+//			{
+//				ydata[IDX(i,j)] = 1;
+//				ydata[IDX(i,j) + 1] = 1;
+//			}
+//			else
 			{
 				// Set initial wave segment
 				if ( xx >= WaveXMIN && xx <= WaveXMAX && yy >= WaveLength && yy <= (2.0*WaveLength) )
 				{
 					// Set perturbed wave segment to higher initial values
-					ydata[IDX(i,j)] = RCONST(-BETA+2);									// u
-					ydata[IDX(i,j) + 1] = RCONST(BETA*BETA*BETA - 3*BETA + 1.5);		// v
+					ydata[IDX(i,j)] = Us + 2;				// u
+					ydata[IDX(i,j) + 1] = Vs + 1.5;			// v
 				}
 				else
 				{
 					// Set rest of area to stable u,v
-					ydata[IDX(i,j)] = RCONST(-BETA);									// u
-					ydata[IDX(i,j) + 1] = RCONST(BETA*BETA*BETA - 3*BETA);				// v
+					ydata[IDX(i,j)] = Us;					// u
+					ydata[IDX(i,j) + 1] = Vs;				// v
 
 				}
 			}
