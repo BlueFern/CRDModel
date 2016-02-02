@@ -41,6 +41,7 @@ __)----/ ' (  ) ' |    }
 
 
 // Header files
+#include <time.h>
 #include <stdio.h>
 #include <iostream>
 #include <string.h>
@@ -64,7 +65,6 @@ using namespace std;
 #define ONE RCONST(1.0)
 #define TWO RCONST(2.0)
 #define THREE RCONST(3.0)
-#define SURFACEWIDTH RCONST(20.0) 	// Width of the flat surface
 
 // System parameters
 #define EPSILON 0.36			// Time scale separation of the two variables
@@ -79,6 +79,7 @@ double XMIN, XMAX, YMIN, YMAX;
 double DIFF = 0.0;					// Diffusion parameter - default is 0.12
 double BETA = 0.0;					// Bifurcation parameter - system is oscillatory for BETA < 1, stable for BETA > 1
 double SURFACELENGTH = 0.0;	 		// Length of the flat surface, usually 80 or 40 to match with the corresponding torus
+double SURFACEWIDTH = 0.0;		 	// Width of the flat surface, usually 20
 double WAVELENGTH = 0.0;			// Initial wave segment length as a percentage of total length of torus (phi)
 double WAVEWIDTH = 0.0;				// Initial wave segment width as a percentage of total width of torus (theta)
 int WAVEINSIDE =  0;				// Bool/int for whether the initial wave is centered on the inside of the torus (true=1) or outside (false=0)
@@ -155,7 +156,8 @@ int main(int argc, char* argv[])
 	boost::property_tree::ini_parser::read_ini(argv[1], pt);
 	DIFF = pt.get<double>("Parameters.diffusion");
 	BETA = pt.get<double>("Parameters.beta");
-	SURFACELENGTH = pt.get<double>("Parameters.majorCirc");		// This is the length of the flat surface
+	SURFACELENGTH = pt.get<double>("Parameters.surfaceLength");		// Length of the flat surface
+	SURFACEWIDTH = pt.get<double>("Parameters.surfaceWidth");		// Width of the flat surface
 	WAVELENGTH = pt.get<double>("Parameters.waveLength");
 	WAVEWIDTH = pt.get<double>("Parameters.waveWidth");
 	OUTPUT_TIMESTEP = pt.get<int>("Parameters.outputTimestep");
@@ -167,10 +169,18 @@ int main(int argc, char* argv[])
 	INCLUDEALLVARS = pt.get<int>("System.includeAllVars");
 	VARYBETA = pt.get<int>("System.varyBeta");
 
-	XMIN = 0.0;				                // grid boundaries in theta
+	XMIN = 0.0;				                // grid boundaries in x
 	XMAX = SURFACEWIDTH - XMIN;
-	YMIN = 0.0;			    	    		// grid boundaries in phi
+	YMIN = 0.0;			    	    		// grid boundaries in y
 	YMAX = SURFACELENGTH - YMIN;
+
+	// Time variables
+	time_t start_t = 0;
+	time_t end_t = 0;
+	double total_t = 0;
+	double eta = 0;
+
+	time(&start_t);
 
 	// general problem parameters
 	realtype T0 = RCONST(0.0);   		// initial time
@@ -242,9 +252,10 @@ int main(int argc, char* argv[])
 		cout << "   Tfinal = " << TFINAL << "\n";
 		cout << "   Output timesteps = " << OUTPUT_TIMESTEP << "\n";
 		cout << "   Surface length = " << SURFACELENGTH << "\n";
+		cout << "   Surface width = " << SURFACEWIDTH << "\n";
 		cout << "   Absorbing boundary turn off time = " << TBOUNDARY << "\n";
-		cout << "   Wavelength = " << WAVELENGTH << "\%\n";
-		cout << "   Wavewidth = " << WAVEWIDTH << "\%\n";
+		cout << "   Wavelength = " << WAVELENGTH*100 << "\%\n";
+		cout << "   Wavewidth = " << WAVEWIDTH*100 << "\%\n";
 		cout << "   rtol = " << rtol << "\n";
 		cout << "   atol = " << atol << "\n";
 		cout << "   Include all variables in output = " << INCLUDEALLVARS << "\n";
@@ -279,13 +290,16 @@ int main(int argc, char* argv[])
 		{
 			xx = XMIN + (udata->is+i)*(udata->dx);					// Actual x values
 
-//			if (VARYBETA == 1)
-//			{
-//				ydata[IDX(i,j)] = 1;
-//				ydata[IDX(i,j) + 1] = 1;
-//			}
-//			else
+			if (VARYBETA == 1)
 			{
+				ydata[IDX(i,j)] = 1;
+				ydata[IDX(i,j) + 1] = 1;
+			}
+			else
+			{
+//				// Set initial wave segment as a circle with centre (xr, yr) and radius r
+//				double r = SURFACEWIDTH/5, xr = SURFACEWIDTH/2, yr = SURFACELENGTH/2;
+//				if ((pow(xx-xr,2)+pow(yy-yr,2)) <= pow(r,2))
 				// Set initial wave segment
 				if ( xx >= WaveXMIN && xx <= WaveXMAX && yy >= WaveLength && yy <= (2.0*WaveLength) )
 				{
@@ -298,7 +312,6 @@ int main(int argc, char* argv[])
 					// Set rest of area to stable u,v
 					ydata[IDX(i,j)] = Us;					// u
 					ydata[IDX(i,j) + 1] = Vs;				// v
-
 				}
 			}
 		}
@@ -405,19 +418,29 @@ int main(int argc, char* argv[])
 		fprintf(UFID2,"\n");
 		}
 
+		// Time taken since beginning
+		time(&end_t);
+
+		// Update total time since beginning and reset start_t
+		total_t += difftime(end_t, start_t);
+		start_t = end_t;
+
+		// Estimated time remaining based on number of iterations left and total time taken so far
+		eta = ( Nt - (iout+1) ) * ( total_t / (iout+1) );
+
 		// Output progress
 		if (outproc)
 		{
 			if (iout > 0)
 			{
-				// Rewrite previous line
-				printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
+				// Rewrite previous line (fix eventually)
+				printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
 			}
-			printf("   %3d /%3d done", iout+1, Nt);
+			printf("   %3d \% | %3d min %2d sec elapsed | %3d min %2d sec remaining", 100*(iout+1)/Nt, (int)(total_t/60), ((int)total_t % 60), (int)(eta/60), ((int)eta % 60));
 			fflush(stdout);
 		}
 	}
-	if (outproc)  cout << "   ----------------------\n";
+	if (outproc)  cout << "\n   ----------------------\n";
 	fclose(UFID);
 
 	if (INCLUDEALLVARS == 1)

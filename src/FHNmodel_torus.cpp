@@ -63,7 +63,6 @@ using namespace std;
 #define PI RCONST(3.1415926535897932)
 #define ONE RCONST(1.0)
 #define TWO RCONST(2.0)
-#define MINORCIRC RCONST(20.0) 	// Minor circumference of the torus
 
 // System parameters
 #define EPSILON 0.36			// Time scale separation of the two variables
@@ -81,6 +80,7 @@ using namespace std;
 double DIFF = 0.0;					// Diffusion parameter - default is 0.12
 double BETA = 0.0;					// Bifurcation parameter - system is oscillatory for BETA < 1, stable for BETA > 1
 double MAJORCIRC = 0.0;	 			// Major circumference of the torus - use 80.0 for normal, 40.0 for more curved surface
+double MINORCIRC = 0.0;		 		// Minor circumference of the torus - use 20.0
 double WAVELENGTH = 0.0;			// Initial wave segment length as a percentage of total length of torus (phi)
 double WAVEWIDTH = 0.0;				// Initial wave segment width as a percentage of total width of torus (theta)
 int WAVEINSIDE =  0;				// Bool/int for whether the initial wave is centered on the inside of the torus (true=1) or outside (false=0)
@@ -159,7 +159,8 @@ int main(int argc, char* argv[])
 	boost::property_tree::ini_parser::read_ini(argv[1], pt);
 	DIFF = pt.get<double>("Parameters.diffusion");
 	BETA = pt.get<double>("Parameters.beta");
-	MAJORCIRC = pt.get<double>("Parameters.majorCirc");
+	MAJORCIRC = pt.get<double>("Parameters.surfaceLength");
+	MINORCIRC = pt.get<double>("Parameters.surfaceWidth");
 	WAVELENGTH = pt.get<double>("Parameters.waveLength");
 	WAVEWIDTH = pt.get<double>("Parameters.waveWidth");
 	WAVEINSIDE = pt.get<int>("Parameters.waveInside");
@@ -171,6 +172,14 @@ int main(int argc, char* argv[])
 	BETAMAX = pt.get<double>("Parameters.betaMax");
 	INCLUDEALLVARS = pt.get<int>("System.includeAllVars");
 	VARYBETA = pt.get<int>("System.varyBeta");
+
+	// Time variables
+	time_t start_t = 0;
+	time_t end_t = 0;
+	double total_t = 0;
+	double eta = 0;
+
+	time(&start_t);
 
 	// general problem parameters
 	realtype T0 = RCONST(0.0);   		// initial time
@@ -246,6 +255,7 @@ int main(int argc, char* argv[])
 		cout << "   Tfinal = " << TFINAL << "\n";
 		cout << "   Output timesteps = " << OUTPUT_TIMESTEP << "\n";
 		cout << "   Major circumference = " << MAJORCIRC << "\n";
+		cout << "   Minor circumference = " << MINORCIRC << "\n";
 		cout << "   Absorbing boundary turn off time = " << TBOUNDARY << "\n";
 		cout << "   Wavelength = " << WAVELENGTH*100 << "\%\n";
 		cout << "   Wavewidth = " << WAVEWIDTH*100 << "\%\n";
@@ -443,15 +453,25 @@ int main(int argc, char* argv[])
 		fprintf(UFID2,"\n");
 		}
 
+		// Time taken since beginning
+		time(&end_t);
+
+		// Update total time since beginning and reset start_t
+		total_t += difftime(end_t, start_t);
+		start_t = end_t;
+
+		// Estimated time remaining based on number of iterations left and total time taken so far
+		eta = ( Nt - (iout+1) ) * ( total_t / (iout+1) );
+
 		// Output progress
 		if (outproc)
 		{
 			if (iout > 0)
 			{
-				// Rewrite previous line
-				printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
+				// Rewrite previous line (fix eventually)
+				printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
 			}
-			printf("   %3d /%3d done", iout+1, Nt);
+			printf("   %3d \% | %3d min %2d sec elapsed | %3d min %2d sec remaining", 100*(iout+1)/Nt, (int)(total_t/60), ((int)total_t % 60), (int)(eta/60), ((int)eta % 60));
 			fflush(stdout);
 		}
 	}

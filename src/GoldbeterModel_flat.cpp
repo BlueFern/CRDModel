@@ -64,7 +64,6 @@ using namespace std;
 #define ONE RCONST(1.0)
 #define TWO RCONST(2.0)
 #define THREE RCONST(3.0)
-#define SURFACEWIDTH RCONST(20.0) 	// Width of the flat surface
 
 // Min and max values for when VARYBETA = 1
 #define BETAMIN 0
@@ -95,6 +94,7 @@ double XMIN, XMAX, YMIN, YMAX;
 double DIFF = 0.0;					// Diffusion parameter - default is 0.12
 double BETA = 0.0;					// Bifurcation parameter - system is oscillatory for BETA < 1, stable for BETA > 1
 double SURFACELENGTH = 0.0;	 		// Length of the flat surface, usually 80 or 40 to match with the corresponding torus
+double SURFACEWIDTH = 0.0;		 	// Width of the flat surface, usually 20
 double WAVELENGTH = 0.0;			// Initial wave segment length as a percentage of total length of torus (phi)
 double WAVEWIDTH = 0.0;				// Initial wave segment width as a percentage of total width of torus (theta)
 int WAVEINSIDE =  0;				// Bool/int for whether the initial wave is centered on the inside of the torus (true=1) or outside (false=0)
@@ -123,6 +123,8 @@ typedef struct {
 	MPI_Comm comm;        // communicator object
 	int rank;             // MPI process ID/rank
 	int nprocs;           // total number of MPI processes
+	double Zs;			  // Steady state of Z variable dependent on beta
+	double Ys;			  // Steady state of Y variable dependent on beta
 	realtype *Erecv;      // receive buffers for neighbour exchange
 	realtype *Wrecv;
 	realtype *Nrecv;
@@ -171,7 +173,8 @@ int main(int argc, char* argv[])
 	boost::property_tree::ini_parser::read_ini(argv[1], pt);
 	DIFF = pt.get<double>("Parameters.diffusion");
 	BETA = pt.get<double>("Parameters.beta");
-	SURFACELENGTH = pt.get<double>("Parameters.majorCirc");		// This is the length of the flat surface
+	SURFACELENGTH = pt.get<double>("Parameters.surfaceLength");		// Length of the flat surface
+	SURFACEWIDTH = pt.get<double>("Parameters.surfaceWidth");		// Width of the flat surface
 	WAVELENGTH = pt.get<double>("Parameters.waveLength");
 	WAVEWIDTH = pt.get<double>("Parameters.waveWidth");
 	OUTPUT_TIMESTEP = pt.get<int>("Parameters.outputTimestep");
@@ -182,6 +185,14 @@ int main(int argc, char* argv[])
 	VARYBETA = pt.get<int>("System.varyBeta");
 	SYMMETRICIC = pt.get<int>("System.symmetricIC");
 	JUSTDIFFUSION = pt.get<int>("System.justDiffusion");
+
+	// Time variables
+	time_t start_t = 0;
+	time_t end_t = 0;
+	double total_t = 0;
+	double eta = 0;
+
+	time(&start_t);
 
 	XMIN = 0.0;				                // grid boundaries in x
 	XMAX = SURFACEWIDTH - XMIN;
@@ -247,6 +258,9 @@ int main(int argc, char* argv[])
 	double Zs, Ys;
 	// Import the last two values of the solution as the stable state of the model
 	int error = fscanf(in, "[%lf] [%lf]", &Zs, &Ys);
+	// Put into udata structure so it can be used elsewhere
+	udata->Zs = Zs;
+	udata->Ys = Ys;
 
 	// Initial problem output
 	bool outproc = (udata->rank == 0);
@@ -261,9 +275,10 @@ int main(int argc, char* argv[])
 		cout << "   Tfinal = " << TFINAL << "\n";
 		cout << "   Output timesteps = " << OUTPUT_TIMESTEP << "\n";
 		cout << "   Surface length = " << SURFACELENGTH << "\n";
+		cout << "   Surface width = " << SURFACEWIDTH << "\n";
 		cout << "   Absorbing boundary turn off time = " << TBOUNDARY << "\n";
-		cout << "   Wavelength = " << WAVELENGTH << "\%\n";
-		cout << "   Wavewidth = " << WAVEWIDTH << "\%\n";
+		cout << "   Wavelength = " << WAVELENGTH*100 << "\%\n";
+		cout << "   Wavewidth = " << WAVEWIDTH*100 << "\%\n";
 		cout << "   rtol = " << rtol << "\n";
 		cout << "   atol = " << atol << "\n";
 		cout << "   Include all variables in output = " << INCLUDEALLVARS << "\n";
@@ -288,6 +303,8 @@ int main(int argc, char* argv[])
 	WaveXMIN  = WaveMidpoint - WaveWidth/2.0;
 	WaveXMAX  = WaveMidpoint + WaveWidth/2.0;
 
+	// TODO: make this less messy!
+
 	// Set initial conditions - these are model dependent.
 	ydata = N_VGetArrayPointer(y);
 	for (j=0; j<udata->nyl; j++)
@@ -298,13 +315,12 @@ int main(int argc, char* argv[])
 		{
 			xx = XMIN + (udata->is+i)*(udata->dx);					// Actual x values
 
-			if (VARYBETA != 1)
+			if (VARYBETA == 0)
 			{
 				if (SYMMETRICIC ==  1)
 				{
 					// Set initial wave segment symmetric
-					//if ( xx >= WaveXMIN && xx <= WaveXMAX && yy >= WaveLength && yy <= (2.0*WaveLength) )
-				    if ( xx >= WaveXMIN && xx <= WaveXMAX && yy >= 2 && yy <= (2+WaveLength) )
+					if ( xx >= WaveXMIN && xx <= WaveXMAX && yy >= 2.0*WaveLength && yy <= (3.0*WaveLength) )
 					{
 						ydata[IDX(i,j)] = Zs + 1;
 						ydata[IDX(i,j) + 1] = Ys + 1;
@@ -353,12 +369,13 @@ int main(int argc, char* argv[])
 			}
 			else if (VARYBETA == 1)
 			{
-				// If we vary beta over flat surface, set all of surface to physiological ICs (taken from Goldbeter paper)
+				// Set all of surface to homogeneous physiological ICs (taken from Goldbeter paper)
 //				ydata[IDX(i,j)] = 0.4;
 //				ydata[IDX(i,j)+1] = 1.6;
 
-				// Set initial wave segment off centre (not symmetric)
+				// Set initial wave segment
 //				if ( xx >= (10-4.5) && xx <= (10+2.5) && yy >= SURFACELENGTH*0.5 && yy <= SURFACELENGTH*0.75)
+//				if ( xx >= WaveXMIN && xx <= WaveXMAX && yy >= 2.0*WaveLength && yy <= (3.0*WaveLength) )
 //				{
 //					ydata[IDX(i,j)] = 1.4;
 //					ydata[IDX(i,j) + 1] = 2.6;
@@ -373,9 +390,6 @@ int main(int argc, char* argv[])
 				// Set random ICs
 				ydata[IDX(i,j)] = (float)rand()/RAND_MAX*2.0;
 				ydata[IDX(i,j) + 1] = (float)rand()/RAND_MAX*2.0;
-
-
-
 			}
 		}
 	}
@@ -480,15 +494,25 @@ int main(int argc, char* argv[])
 		fprintf(UFID2,"\n");
 		}
 
+		// Time taken since beginning
+		time(&end_t);
+
+		// Update total time since beginning and reset start_t
+		total_t += difftime(end_t, start_t);
+		start_t = end_t;
+
+		// Estimated time remaining based on number of iterations left and total time taken so far
+		eta = ( Nt - (iout+1) ) * ( total_t / (iout+1) );
+
 		// Output progress
 		if (outproc)
 		{
 			if (iout > 0)
 			{
-				// Rewrite previous line
-				printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
+				// Rewrite previous line (fix eventually)
+				printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
 			}
-			printf("   %3d /%3d done", iout+1, Nt);
+			printf("   %3d \% | %3d min %2d sec elapsed | %3d min %2d sec remaining", 100*(iout+1)/Nt, (int)(total_t/60), ((int)total_t % 60), (int)(eta/60), ((int)eta % 60));
 			fflush(stdout);
 		}
 	}
@@ -635,18 +659,6 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 					// beta varying linearly from BETAMIN to BETAMAX
 					b = BETAMIN + yy*(BETAMAX - BETAMIN)/(YMAX - YMIN);
 				}
-				else if (VARYBETA == 2)
-				{
-					// beta set to BETA everywhere but in a square in the centre (nonexcitable)
-					if ( xx >= 0 && xx <= 8 && yy >= SURFACELENGTH/2 && yy <= (SURFACELENGTH/2 + 4) )
-					{
-						b = 0.1;
-					}
-					else
-					{
-						b = BETA;
-					}
-				}
 
 				realtype Z = yarray[IDX(i,j)];
 				realtype Y = yarray[IDX(i,j)+1];
@@ -672,6 +684,12 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 						ydotarray[IDX(i,j)] = 0; 	// Z
 						ydotarray[IDX(i,j)+1] = 0;  // Y
 					}
+					// OPTIONAL - for barriers to break the wave that disappear at some time specified, keep derivative constant at barriers
+//					else if ((xx <= 15 || xx >= 25) && yy >= 0 && yy <= 40 && t<12.8)
+//					{
+//						ydotarray[IDX(i,j)] = 0; 	// Z
+//						ydotarray[IDX(i,j)+1] = 0;  // Y
+//					}
 					else
 					{
 						ydotarray[IDX(i,j)] += v0 + v1*b - v2 + v3 + kf*Y - k*Z;  // Z
