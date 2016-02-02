@@ -17,7 +17,8 @@ def plot_GoldbeterModel_flat(programArguments):
     conf = ConfigObj(programArguments)
     parameters = conf['Parameters']
     systemParameters = conf['System']
-    surfaceLength = parameters['majorCirc']
+    surfaceLength = parameters['surfaceLength']
+    surfaceWidth = parameters['surfaceWidth']
     beta = parameters['beta']
     tFinal = parameters['tFinal']
     varyBeta = int(systemParameters['varyBeta'])

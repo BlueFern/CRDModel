@@ -44,14 +44,15 @@ if __name__ == '__main__':
     conf = ConfigObj(args.configFile)
     parameters = conf['Parameters']
     systemParameters = conf['System']
-    majorCirc = parameters['majorCirc']
+    majorCirc = parameters['surfaceLength']
+    minorCirc = parameters['surfaceWidth']
     thetaMesh = parameters['thetaMesh']
     tFinal = parameters['tFinal']
     includeAllVars = int(systemParameters['includeAllVars'])
     varyBeta = int(systemParameters['varyBeta'])
 
     # Minor radius of torus
-    r = 20/(2*np.pi)
+    r = float(minorCirc)/(2*np.pi)
     
     # Major radius of torus
     R = float(majorCirc)/(2*np.pi)
