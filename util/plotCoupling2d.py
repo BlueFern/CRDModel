@@ -163,4 +163,4 @@ if __name__ == '__main__':
     if len(sys.argv) != 2:
         print "Usage: " + sys.argv[0] + " <Program Arguments>"
     else:
-        plot_GoldbeterModel_torus(sys.argv[1])
+        plotCoupling2d(sys.argv[1])

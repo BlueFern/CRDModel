@@ -192,6 +192,7 @@ int main(int argc, char* argv[])
 	double total_t = 0;
 	double eta = 0;
 
+	// Record the time at the start of program
 	time(&start_t);
 
 	XMIN = 0.0;				                // grid boundaries in x
