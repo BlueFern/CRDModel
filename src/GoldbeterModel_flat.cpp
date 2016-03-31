@@ -1,5 +1,4 @@
-/* Goldbeter SMC model with periodic BCs on a 2D flat surface. ICs: stable state everywhere apart from
- * a small rectangle centred on the surface.
+/* Goldbeter Calcium Cell model simulated on a 2D flat surface with periodic BCs.
  *
  * The model equations are:
  *
@@ -7,6 +6,8 @@
  * Y' = v2 + v3 + kf*Y
  *
  * where Z is the calcium concentration in the SMC cytosol, Y is the calcium concentration in the SMC stores.
+ *
+ * The Laplacian is d2/dx2 + d2/dy2 for a flat surface.
  *
 
        /-/--\
@@ -52,22 +53,15 @@ __)----/ ' (  ) ' |    }
 #include "sundials/sundials_types.h"  			// def. of type 'realtype'
 #include <sundials/sundials_math.h>   			// math macros
 #include "mpi.h"                      			// MPI header file
-#include <boost/property_tree/ptree.hpp>		//
+#include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/ini_parser.hpp>
 using namespace std;
 
-// accessor macro between (x,y) location and 1D NVector array
-#define IDX(x,y) (NVARS*(x) + NVARS*(y)*udata->nxl)
+// Accessor macro between (x,y) location and 1D NVector array
+#define IDX(x,y) (NVARS * (x) + NVARS * (y) * udata->nxl)
 
 // Constants
 #define PI RCONST(3.1415926535897932)
-#define ONE RCONST(1.0)
-#define TWO RCONST(2.0)
-#define THREE RCONST(3.0)
-
-// Min and max values for when VARYBETA = 1
-#define BETAMIN 0
-#define BETAMAX 1
 
 // System parameters
 #define v0 1.0
@@ -83,7 +77,6 @@ using namespace std;
 #define n 2.0
 #define p 4.0
 
-
 // Number of variables in the system
 #define NVARS 2
 
@@ -93,19 +86,20 @@ double XMIN, XMAX, YMIN, YMAX;
 // Initialise parameters, found in ini file
 double DIFF = 0.0;					// Diffusion parameter - default is 0.12
 double BETA = 0.0;					// Bifurcation parameter - system is oscillatory for BETA < 1, stable for BETA > 1
-double SURFACELENGTH = 0.0;	 		// Length of the flat surface, usually 80 or 40 to match with the corresponding torus
-double SURFACEWIDTH = 0.0;		 	// Width of the flat surface, usually 20
-double WAVELENGTH = 0.0;			// Initial wave segment length as a percentage of total length of torus (phi)
-double WAVEWIDTH = 0.0;				// Initial wave segment width as a percentage of total width of torus (theta)
-int WAVEINSIDE =  0;				// Bool/int for whether the initial wave is centered on the inside of the torus (true=1) or outside (false=0)
+double SURFACE_LENGTH = 0.0;	 	// Length of the flat surface, usually 80
+double SURFACE_WIDTH = 0.0;		 	// Width of the flat surface, usually 20
+double WAVE_LENGTH = 0.0;			// Initial wave segment length as a percentage of total length of surface (y)
+double WAVE_WIDTH = 0.0;			// Initial wave segment width as a percentage of total width of surface (x)
 int OUTPUT_TIMESTEP = 0; 			// Number of timesteps to output to file
-double TBOUNDARY = 0.0;				// Time to turn off the absorbing boundary at phi = 0 (to eliminate backwards travelling waves) - set to 0 for no absorbing boundary
-double TFINAL = 0.0;				// Time to run simulation
-int NX = 0;							// Mesh size in theta direction
-int INCLUDEALLVARS = 0;				// Bool/int for whether we write all variables to file (true=1) or only the main activator variable u (false=0)
-int VARYBETA = 0;					// Bool/int for whether to vary beta over the surface of the torus (true=1) or keep it constant (false=0)
-int SYMMETRICIC = 0;				// Bool/int for whether to have a symmetric initial perturbation centred on either the inside or outside of the torus, or an alternative IC
-int JUSTDIFFUSION = 0;				// Bool/int for whether to have no reaction terms (1) or normal (0)
+double T_BOUNDARY = 0.0;			// Time to turn off the absorbing boundary at y = 0 (to eliminate backwards travelling waves) - set to 0 for no absorbing boundary
+double T_FINAL = 0.0;				// Time to run simulation
+int X_MESH = 0;						// Mesh size in x direction
+double BETA_MIN = 0;				// Minimum beta value when it's spatially varied
+double BETA_MAX = 0;				// Maximum beta value when it's spatially varied
+int INCLUDE_ALL_VARS = 0;			// Int for whether we write all variables to file (1) or only the main activator variable u (0)
+int VARY_BETA = 0;					// Int for whether to vary beta over the surface of the torus (1) or keep it spatially constant (0)
+int JUST_DIFFUSION = 0;				// Int for whether to have no reaction terms (1) to simulate the diffusion equation, or normal (0)
+int IC_TYPE = 0;					// Int for the initial conditions when beta is spatially varied. 0: homogeneous ICs, 1: initial perturbation, 2: random ICs.
 
 // user data structure
 typedef struct {
@@ -119,12 +113,12 @@ typedef struct {
 	long int nyl;         // local number of y grid points
 	realtype dx;          // x-directional mesh spacing
 	realtype dy;          // y-directional mesh spacing
-	realtype Diff;        // diffusion coefficient for equation 1
+	realtype Diff;        // diffusion coefficient
 	MPI_Comm comm;        // communicator object
 	int rank;             // MPI process ID/rank
 	int nprocs;           // total number of MPI processes
-	double Zs;			  // Steady state of Z variable dependent on beta
-	double Ys;			  // Steady state of Y variable dependent on beta
+	double Zs;			  // Steady state of Z variable dependent on beta (Goldbeter model dependent)
+	double Ys;			  // Steady state of Y variable dependent on beta (Goldbeter model dependent)
 	realtype *Erecv;      // receive buffers for neighbour exchange
 	realtype *Wrecv;
 	realtype *Nrecv;
@@ -136,27 +130,28 @@ typedef struct {
 } UserData;
 
 // User-supplied Function Called by the Solver
-
 static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data);
 
-// Private functions
-
+// Private functions shown later
 //    checks function return values
 static int check_flag(void *flagvalue, const string funcname, int opt);
 
 //    sets default values into UserData structure
-static int InitUserData(UserData *udata);
+static int init_user_data(UserData *udata);
 
 //    sets up parallel decomposition
-static int SetupDecomp(UserData *udata);
+static int setup_decomp(UserData *udata);
 
 //    performs neighbor exchange
-static int Exchange(N_Vector y, UserData *udata);
+static int exchange(N_Vector y, UserData *udata);
 
 //    frees memory allocated within UserData
-static int FreeUserData(UserData *udata);
+static int free_user_data(UserData *udata);
 
+
+// Line useful for debugging
 // printf("[%d]---%s:%d\n", rank, __FILE__, __LINE__);
+
 
 // Main Program
 int main(int argc, char* argv[])
@@ -173,20 +168,22 @@ int main(int argc, char* argv[])
 	boost::property_tree::ini_parser::read_ini(argv[1], pt);
 	DIFF = pt.get<double>("Parameters.diffusion");
 	BETA = pt.get<double>("Parameters.beta");
-	SURFACELENGTH = pt.get<double>("Parameters.surfaceLength");		// Length of the flat surface
-	SURFACEWIDTH = pt.get<double>("Parameters.surfaceWidth");		// Width of the flat surface
-	WAVELENGTH = pt.get<double>("Parameters.waveLength");
-	WAVEWIDTH = pt.get<double>("Parameters.waveWidth");
+	SURFACE_LENGTH = pt.get<double>("Parameters.surfaceLength");
+	SURFACE_WIDTH = pt.get<double>("Parameters.surfaceWidth");
+	WAVE_LENGTH = pt.get<double>("Parameters.waveLength");
+	WAVE_WIDTH = pt.get<double>("Parameters.waveWidth");
 	OUTPUT_TIMESTEP = pt.get<int>("Parameters.outputTimestep");
-	TBOUNDARY = pt.get<double>("Parameters.tBoundary");
-	TFINAL = pt.get<double>("Parameters.tFinal");
-	NX = pt.get<int>("Parameters.thetaMesh");				// This is the mesh of the X direction
-	INCLUDEALLVARS = pt.get<int>("System.includeAllVars");
-	VARYBETA = pt.get<int>("System.varyBeta");
-	SYMMETRICIC = pt.get<int>("System.symmetricIC");
-	JUSTDIFFUSION = pt.get<int>("System.justDiffusion");
+	T_BOUNDARY = pt.get<double>("Parameters.tBoundary");
+	T_FINAL = pt.get<double>("Parameters.tFinal");
+	X_MESH = pt.get<int>("Parameters.xMesh");
+	BETA_MIN = pt.get<double>("Parameters.betaMin");
+	BETA_MAX = pt.get<double>("Parameters.betaMax");
+	INCLUDE_ALL_VARS = pt.get<int>("System.includeAllVars");
+	VARY_BETA = pt.get<int>("System.varyBeta");
+	JUST_DIFFUSION = pt.get<int>("System.justDiffusion");
+	IC_TYPE = pt.get<int>("System.icType");
 
-	// Time variables
+	// Time variables used later to output progress of the program at each iteration
 	time_t start_t = 0;
 	time_t end_t = 0;
 	double total_t = 0;
@@ -196,27 +193,26 @@ int main(int argc, char* argv[])
 	time(&start_t);
 
 	XMIN = 0.0;				                // grid boundaries in x
-	XMAX = SURFACEWIDTH - XMIN;
+	XMAX = SURFACE_WIDTH - XMIN;
 	YMIN = 0.0;			    	    		// grid boundaries in y
-	YMAX = SURFACELENGTH - YMIN;
+	YMAX = SURFACE_LENGTH - YMIN;
 
 	// general problem parameters
-	realtype T0 = RCONST(0.0);   		// initial time
-	realtype Tf = TFINAL;     			// final time
-	int Nt = OUTPUT_TIMESTEP;     		// total number of output times
-	long int lengthWidthRatio = SURFACELENGTH/SURFACEWIDTH;
-	long int nx = NX;             		// spatial mesh size
-	long int ny = NX*lengthWidthRatio;
-	int WaveInside = WAVEINSIDE;
-	realtype xx, yy;					// real x,y values
-	realtype Diff = DIFF;				// Diffusion coefficient for eq 1
-	realtype rtol = 1.e-5;       		// relative and absolute tolerances
+	realtype T0 = RCONST(0.0);   			// initial time
+	realtype Tf = T_FINAL;     				// final time
+	int Nt = OUTPUT_TIMESTEP;     			// total number of output times
+	long int length_width_ratio = SURFACE_LENGTH / SURFACE_WIDTH;
+	long int nx = X_MESH;             		// spatial mesh size in x direction
+	long int ny = X_MESH * length_width_ratio;	// spatial mesh size in y direction
+	realtype xx, yy;						// real x,y values
+	realtype Diff = DIFF;					// Diffusion coefficient
+	realtype rtol = 1.e-5;       			// relative and absolute tolerances
 	realtype atol = 1.e-10;
-	realtype WaveLength = (YMAX-YMIN)*WAVELENGTH;
-	realtype WaveWidth = (XMAX-XMIN)*WAVEWIDTH;
-	realtype WaveMidpoint;
-	realtype WaveXMIN;
-	realtype WaveXMAX;
+	realtype wave_length = (YMAX - YMIN) * WAVE_LENGTH;
+	realtype wave_width = (XMAX - XMIN) * WAVE_WIDTH;
+	realtype wave_midpoint;
+	realtype wave_XMIN;
+	realtype wave_XMAX;
 
 	UserData *udata = NULL;
 	realtype *data;
@@ -229,7 +225,7 @@ int main(int argc, char* argv[])
 	N_Vector y = NULL;             // empty vector for storing solution
 	void *arkode_mem = NULL;       // empty ARKode memory structure
 
-	// initialize MPI
+	// Initialize MPI **********************************************************************
 	flag = MPI_Init(&argc, &argv);
 	if (check_flag(&flag, "MPI_Init", 1)) return 1;
 	flag = MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -237,24 +233,22 @@ int main(int argc, char* argv[])
 
 	// allocate and fill udata structure
 	udata = new UserData;
-	flag = InitUserData(udata);
-	if (check_flag(&flag, "InitUserData", 1)) return 1;
+	flag = init_user_data(udata);
+	if (check_flag(&flag, "init_user_data", 1)) return 1;
 
 	udata->rank = rank;
 	udata->nx = nx;
 	udata->ny = ny;
 	udata->Diff = Diff;
-	udata->dx = (XMAX-XMIN)/(1.0*nx-1.0);   // x mesh spacing
-	udata->dy = (YMAX-YMIN)/(1.0*ny-1.0);   // y mesh spacing
+	udata->dx = (XMAX - XMIN) / (1.0 * nx - 1.0);   // x mesh spacing
+	udata->dy = (YMAX - YMIN) / (1.0 * ny - 1.0);   // y mesh spacing
 
-	// Set up parallel decomposition **********************************************************************
-	flag = SetupDecomp(udata);
-	if (check_flag(&flag, "SetupDecomp", 1)) return 1;
+	// Set up parallel decomposition
+	flag = setup_decomp(udata);
+	if (check_flag(&flag, "setup_decomp", 1)) return 1;
 
-	// Find stable state of ODE model dependent on beta:
-	// Run python script to solve the ODE problem
+	// Find stable state of ODE model dependent on beta: run python script to solve the ODE problem
 	std::string command = "SolveGoldbeterODE.py " + pt.get<std::string>("Parameters.beta");
-
 	FILE* in = popen(command.c_str(), "r");
 	double Zs, Ys;
 	// Import the last two values of the solution as the stable state of the model
@@ -263,9 +257,10 @@ int main(int argc, char* argv[])
 	udata->Zs = Zs;
 	udata->Ys = Ys;
 
-	// Initial problem output
-	bool outproc = (udata->rank == 0);
-	if (outproc) {
+	// Initial problem std output
+	bool outproc = (udata->rank == 0); 	// only outputs if the process is rank 0
+	if (outproc)
+	{
 		cout << "\n2D Goldbeter model PDE problem on a flat surface:\n";
 		cout << "   nprocs = " << udata->nprocs << "\n";
 		cout << "   nx = " << udata->nx << "\n";
@@ -273,128 +268,117 @@ int main(int argc, char* argv[])
 		cout << "   nxl = " << udata->nxl << "\n";
 		cout << "   nyl = " << udata->nyl << "\n";
 		cout << "   Diff = " << udata->Diff << "\n";
-		cout << "   Tfinal = " << TFINAL << "\n";
+		cout << "   Tfinal = " << T_FINAL << "\n";
 		cout << "   Output timesteps = " << OUTPUT_TIMESTEP << "\n";
-		cout << "   Surface length = " << SURFACELENGTH << "\n";
-		cout << "   Surface width = " << SURFACEWIDTH << "\n";
-		cout << "   Absorbing boundary turn off time = " << TBOUNDARY << "\n";
-		cout << "   Wavelength = " << WAVELENGTH*100 << "\%\n";
-		cout << "   Wavewidth = " << WAVEWIDTH*100 << "\%\n";
+		cout << "   Surface length = " << SURFACE_LENGTH << "\n";
+		cout << "   Surface width = " << SURFACE_WIDTH << "\n";
+		cout << "   Wavelength = " << WAVE_LENGTH*100 << "\%\n";
+		cout << "   Wavewidth = " << WAVE_WIDTH*100 << "\%\n";
 		cout << "   rtol = " << rtol << "\n";
 		cout << "   atol = " << atol << "\n";
-		cout << "   Include all variables in output = " << INCLUDEALLVARS << "\n";
-		if (VARYBETA == 0)
+
+		if (JUST_DIFFUSION == 1)
 		{
-			cout << "   Beta = " << BETA << "\n";
-			cout << "   Stable state values: Z = " << Zs << ", Y = " << Ys << "\n\n";
+			cout << "   Diffusion Only\n\n";
 		}
 		else
 		{
-			cout << "   Beta varied over torus\n\n";
+			cout << "   Include all variables in output = " << INCLUDE_ALL_VARS << "\n";
+			cout << "   Absorbing boundary turn off time = " << T_BOUNDARY << "\n";
+			if (VARY_BETA == 0)
+			{
+				cout << "   Beta = " << BETA << "\n";
+				cout << "   Stable state values: Z = " << Zs << ", Y = " << Ys << "\n\n";
+			}
+			else if (VARY_BETA == 1)
+			{
+				cout << "   Beta varied over torus\n";
+				if (IC_TYPE == 0) {cout << "   Homogeneous ICs\n\n";}
+				if (IC_TYPE == 1) {cout << "   ICs: initial perturbation\n\n";}
+				if (IC_TYPE == 2) {cout << "   Random ICs\n\n";}
+			}
 		}
 	}
 
 	// Initialize data structures
-	N = NVARS*(udata->nxl)*(udata->nyl);
-	Ntot = NVARS*nx*ny;
+	N = NVARS*(udata->nxl)*(udata->nyl);				// Number of variables in each subdomain
+	Ntot = NVARS*nx*ny;									// Number of variables in total domain
 	y = N_VNew_Parallel(udata->comm, N, Ntot);         // Create parallel vector for solution
 	if (check_flag((void *) y, "N_VNew_Parallel", 0)) return 1;
 
-	WaveMidpoint = SURFACEWIDTH/2.0;
-	WaveXMIN  = WaveMidpoint - WaveWidth/2.0;
-	WaveXMAX  = WaveMidpoint + WaveWidth/2.0;
+	// Find x boundaries for the initial perturbation
+	wave_midpoint = SURFACE_WIDTH/2.0;
+	wave_XMIN  = wave_midpoint - wave_width/2.0;
+	wave_XMAX  = wave_midpoint + wave_width/2.0;
 
-	// TODO: make this less messy!
-
-	// Set initial conditions - these are model dependent.
+	// Set initial conditions - these are model dependent and rely on WAVE_LENGTH, WAVE_WIDTH, VARY_BETA and IC_TYPE
 	ydata = N_VGetArrayPointer(y);
 	for (j=0; j<udata->nyl; j++)
 	{
-		yy = YMIN + (udata->js+j)*(udata->dy);						// Actual y values
+		yy = YMIN + (udata->js+j)*(udata->dy);		// Actual y values
 
 		for (i=0; i<udata->nxl; i++)
 		{
-			xx = XMIN + (udata->is+i)*(udata->dx);					// Actual x values
+			xx = XMIN + (udata->is+i)*(udata->dx);	// Actual x values
 
-			if (VARYBETA == 0)
+			// Beta is constant over the entire surface
+			if (VARY_BETA == 0)
 			{
-				if (SYMMETRICIC ==  1)
-				{
-					// Set initial wave segment symmetric
-					if ( xx >= WaveXMIN && xx <= WaveXMAX && yy >= 2.0*WaveLength && yy <= (3.0*WaveLength) )
+					// Set the initial perturbation in the centre of the domain with size based on waveLength and wave_width
+					if ( xx >= wave_XMIN && xx <= wave_XMAX && yy >= 2.0*wave_length && yy <= (3.0*wave_length) )
 					{
+						// Set this area to higher initial concentration
 						ydata[IDX(i,j)] = Zs + 1;
 						ydata[IDX(i,j) + 1] = Ys + 1;
 					}
 					else
 					{
-						// Set rest of area to stable
+						// Set rest of area to stable state
 						ydata[IDX(i,j)] = Zs;
 						ydata[IDX(i,j) + 1] = Ys;
-
 					}
-				}
-				else if (SYMMETRICIC == 0)
-				{
-					// Set initial wave segment off centre (not symmetric)
-//						if ( xx >= (WaveXMIN+(WaveXMAX-WaveXMIN)/2) && xx <= (WaveXMAX+(WaveXMAX-WaveXMIN)/2) && yy >= WaveLength && yy <= (2.0*WaveLength) )
-//						{
-//							ydata[IDX(i,j)] = Zs + 1;{
-//							ydata[IDX(i,j) + 1] = Ys + 1;
-//						}
-
-					// Double circle IC
-//						double r = PI/4, xr1 = PI-PI/5, xr2 = PI+PI/5, yr = 2*r;
-//						if (((pow(xx-xr1,2)+pow(yy-yr,2)) <= pow(r,2)) || ((pow(xx-xr2,2)+pow(yy-yr,2)) <= pow(r,2)))
-//						{
-//							ydata[IDX(i,j)] = Zs + 1;
-//							ydata[IDX(i,j) + 1] = Ys + 1;
-//						}
-
-					// Set initial wave segment as a circle with centre (xr, yr) and radius r
-					double r = 20/8, xr = 10, yr = 4*r;
-					if ((pow(xx-xr,2)+pow(yy-yr,2)) <= pow(r,2))
-					{
-						ydata[IDX(i,j)] = Zs + 1;
-						ydata[IDX(i,j) + 1] = Ys + 1;
-					}
-					else
-					{
-						// Set rest of area to stable
-						ydata[IDX(i,j)] = Zs;
-						ydata[IDX(i,j) + 1] = Ys;
-
-					}
-				}
-
 			}
-			else if (VARYBETA == 1)
+
+			// Beta is linearly varied over the surface with respect to y
+			else if (VARY_BETA == 1)
 			{
-				// Set all of surface to homogeneous physiological ICs (taken from Goldbeter paper)
-//				ydata[IDX(i,j)] = 0.4;
-//				ydata[IDX(i,j)+1] = 1.6;
 
-				// Set initial wave segment
-//				if ( xx >= (10-4.5) && xx <= (10+2.5) && yy >= SURFACELENGTH*0.5 && yy <= SURFACELENGTH*0.75)
-//				if ( xx >= WaveXMIN && xx <= WaveXMAX && yy >= 2.0*WaveLength && yy <= (3.0*WaveLength) )
-//				{
-//					ydata[IDX(i,j)] = 1.4;
-//					ydata[IDX(i,j) + 1] = 2.6;
-//				}
-//				else
-//				{
-//					// Set rest of area to stable
-//					ydata[IDX(i,j)] = 0.4;
-//					ydata[IDX(i,j) + 1] = 1.6;
-//				}
+				// Homogeneous ICs
+				if (IC_TYPE == 0)
+				{
+					ydata[IDX(i,j)] = 0.4;
+					ydata[IDX(i,j)+1] = 1.6;
+				}
 
-				// Set random ICs
-				ydata[IDX(i,j)] = (float)rand()/RAND_MAX*2.0;
-				ydata[IDX(i,j) + 1] = (float)rand()/RAND_MAX*2.0;
+				// Initial perturbation with higher concentrations in the centre of the domain
+				if (IC_TYPE == 1)
+				{
+					if ( xx >= wave_XMIN && xx <= wave_XMAX && yy >= 2.0*wave_length && yy <= (3.0*wave_length) )
+					{
+						// Set this area to higher initial concentration
+						ydata[IDX(i,j)] = 1.4;
+						ydata[IDX(i,j) + 1] = 2.6;
+					}
+					else
+					{
+						// Set rest of area lower
+						ydata[IDX(i,j)] = 0.4;
+						ydata[IDX(i,j) + 1] = 1.6;
+					}
+				}
+
+				// Set random ICs for each mesh point within [0,1.4]
+				if (IC_TYPE == 2)
+				{
+					ydata[IDX(i,j)] = (float)rand() / RAND_MAX * 1.4;
+					ydata[IDX(i,j) + 1] = (float)rand() / RAND_MAX * 1.4;
+				}
+
 			}
 		}
 	}
-	arkode_mem = ARKodeCreate();                       // Create the solver memory
+
+	arkode_mem = ARKodeCreate();  // Create the solver memory
 	if (check_flag((void *) arkode_mem, "ARKodeCreate", 0)) return 1;
 
 	/* Call ARKodeInit to initialize the integrator memory and specify the
@@ -413,16 +397,17 @@ int main(int argc, char* argv[])
 	flag = ARKodeSetMaxNumSteps(arkode_mem, 200000);
 	if (check_flag(&flag, "ARKodeSetMaxNumSteps", 1)) return(1);
 
-	// Each processor outputs subdomain information
+	// Each processor outputs subdomain information to a txt file to be used by other scripts
 	char outname[100];
 	sprintf(outname, "GoldbeterModel_flat_subdomain.%03i.txt", udata->rank);
 	FILE *UFID = fopen(outname,"w");
 	fprintf(UFID, "%li  %li  %li  %li  %li  %li %f %f %f\n",
-			udata->nx, udata->ny, udata->is, udata->ie, udata->js, udata->je, XMIN, XMAX, TFINAL);
+			udata->nx, udata->ny, udata->is, udata->ie, udata->js, udata->je, XMIN, XMAX, T_FINAL);
 	fclose(UFID);
 
 	ydata = N_VGetArrayPointer(y);
 
+	// Create files for each subdomain and each variable
 	sprintf(outname, "GoldbeterModel_flat_Z.%03i.txt", udata->rank);
 	UFID = fopen(outname, "w");
 
@@ -430,32 +415,24 @@ int main(int argc, char* argv[])
 	FILE *UFID2 = fopen(outname, "w");
 
 
-	// Write initial conditions to files, one for each variable in each subdomain
+	// Write initial conditions to files, one txt file for each variable in each subdomain
 	for (j=0; j<udata->nyl; j++)
 	{
 		for (i=0; i<udata->nxl; i++)
 		{
 			fprintf(UFID," %.16e", ydata[IDX(i,j)]);
-
-			if (INCLUDEALLVARS == 1)
-			{
-				fprintf(UFID2," %.16e", ydata[IDX(i,j) + 1]);
-			}
+			if (INCLUDE_ALL_VARS == 1) {fprintf(UFID2," %.16e", ydata[IDX(i,j) + 1]);}
 		}
 	}
 	fprintf(UFID,"\n");
-
-	if (INCLUDEALLVARS == 1)
-	{
-	fprintf(UFID2,"\n");
-	}
+	if (INCLUDE_ALL_VARS == 1) {fprintf(UFID2,"\n");}
 
 
 	/* Main time-stepping loop: calls ARKode to perform the integration, then
 		 prints results.  Stops when the final time has been reached */
 	realtype t = T0;
-	realtype dTout = (Tf-T0)/Nt;
-	realtype tout = T0+dTout;
+	realtype dTout = (Tf - T0) / Nt;
+	realtype tout = T0 + dTout;
 
 	int iout;
 	for (iout=0; iout<Nt; iout++)
@@ -464,36 +441,31 @@ int main(int argc, char* argv[])
 		flag = ARKode(arkode_mem, tout, y, &t, ARK_NORMAL);         // call integrator
 		if (check_flag(&flag, "ARKode", 1)) break;
 
-		if (flag >= 0)
-		{                                            // successful solve: update output time
+		if (flag >= 0)	// successful solve: update output time
+		{
 			tout += dTout;
 			tout = (tout > Tf) ? Tf : tout;
-		} else
-		{                                                    // unsuccessful solve: break
+		}
+		else			// unsuccessful solve: break
+		{
 			if (outproc)
 				cerr << "Solver failure, stopping integration\n";
 			break;
 		}
 
-		// output results to disk
+		// output results to txt file
 		for (j=0; j<udata->nyl; j++)
 		{
 			for (i=0; i<udata->nxl; i++)
 			{
 				fprintf(UFID," %.16e", ydata[IDX(i,j)]);
+				if (INCLUDE_ALL_VARS == 1) {fprintf(UFID2," %.16e", ydata[IDX(i,j) + 1]);}
 
-				if (INCLUDEALLVARS == 1)
-				{
-				fprintf(UFID2," %.16e", ydata[IDX(i,j) + 1]);
-				}
 			}
 		}
 		fprintf(UFID,"\n");
+		if (INCLUDE_ALL_VARS == 1) {fprintf(UFID2,"\n");}
 
-		if (INCLUDEALLVARS == 1)
-		{
-		fprintf(UFID2,"\n");
-		}
 
 		// Time taken since beginning
 		time(&end_t);
@@ -505,34 +477,32 @@ int main(int argc, char* argv[])
 		// Estimated time remaining based on number of iterations left and total time taken so far
 		eta = ( Nt - (iout+1) ) * ( total_t / (iout+1) );
 
-		// Output progress
+		// Output progress in terms of percentage remaining, time elapsed and estimated time remaining
 		if (outproc)
 		{
-			if (iout > 0)
+			if (iout > 0) // If its not the first iteration
 			{
-				// Rewrite previous line (fix eventually)
+				// Rewrite previous line (fix eventually to be nicer): \b means backspace
 				printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
 			}
-			printf("   %3d \% | %3d min %2d sec elapsed | %3d min %2d sec remaining", 100*(iout+1)/Nt, (int)(total_t/60), ((int)total_t % 60), (int)(eta/60), ((int)eta % 60));
+			printf("   %3d \% | %3d min %2d sec elapsed | %3d min %2d sec remaining", 100 * (iout + 1) / Nt, (int)(total_t / 60), ((int)total_t % 60), (int)(eta / 60), ((int)eta % 60));
 			fflush(stdout);
 		}
-	}
-	if (outproc)  cout << "\n   ----------------------\n";
-	fclose(UFID);
 
-	if (INCLUDEALLVARS == 1)
-	{
-	fclose(UFID2);
 	}
+	if (outproc) {cout << "\n   ----------------------\n";}
+
+	fclose(UFID);
+	if (INCLUDE_ALL_VARS == 1) {fclose(UFID2);}
 
 	// Clean up and return with successful completion
 	N_VDestroy_Parallel(y);        // Free vectors
-	FreeUserData(udata);         // Free user data
+	free_user_data(udata);         // Free user data
 	delete udata;
 	ARKodeFree(&arkode_mem);     // Free integrator memory
 	flag = MPI_Finalize();       // Finalize MPI
 
-	/* ************************************************************************************** */
+	// End of MPI processes **************************************************************************************
 
 	return 0;
 }
@@ -541,10 +511,10 @@ int main(int argc, char* argv[])
  * Functions called by the solver
  *--------------------------------*/
 
-// f routine to compute the ODE RHS function f(t,y). ydot = f(t,y)
+// f routine to compute the ODE RHS function f(t,y) where y' = f(t,y)
 static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 {
-	N_VConst(0.0, ydot);                           // Initialize ydot to zero
+	N_VConst(0.0, ydot);                           // Initialize y' to zero
 	UserData *udata = (UserData *) user_data;      // access problem data
 	long int nxl = udata->nxl;                     // set variable shortcuts
 	long int nyl = udata->nyl;
@@ -552,155 +522,169 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	realtype Diff = udata->Diff;
 	realtype dx = udata->dx;
 	realtype dy = udata->dy;
-	realtype *yarray, *ydotarray;
-	yarray = NV_DATA_P(y);           // access data arrays
-	ydotarray = NV_DATA_P(ydot);
+	realtype *y_array, *y_dot_array;
+	y_array = NV_DATA_P(y);           // access data arrays
+	y_dot_array = NV_DATA_P(ydot);
 
-	// Exchange boundary data with neighbors
-	int ierr = Exchange(y, udata);
-	if (check_flag(&ierr, "Exchange", 1)) return -1;
+	// exchange boundary data with neighbors
+	int ierr = exchange(y, udata);
+	if (check_flag(&ierr, "exchange", 1)) return -1;
 
-	// Add diffusion term
+	// Add diffusion term, approximated by finite difference methods
 
-	realtype cu1 = Diff/dx/dx;			// D/delx^2
-	realtype cu2 = Diff/dy/dy;			// D/dely^2
-	realtype cu3 = -TWO*(cu1 + cu2);
+	// Easy way to write the terms
+	realtype cu1 = Diff / dx / dx;			// D/delx^2
+	realtype cu2 = Diff / dy / dy;			// D/dely^2
+	realtype cu3 = -2.0 * (cu1 + cu2);
+
 	long int i, j;
 	for (j=1; j<nyl-1; j++)
 	{
 		for (i=1; i<nxl-1; i++)
 		{
-			// Fill in diffusion for u variable
-			ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + yarray[IDX(i+1,j)])
-							 + cu2*(yarray[IDX(i,j-1)] + yarray[IDX(i,j+1)])
-							 + cu3*yarray[IDX(i,j)];
+			// Fill in diffusion for Z variable
+			y_dot_array[IDX(i,j)] = cu1 * (y_array[IDX(i-1,j)] + y_array[IDX(i+1,j)])
+							 + cu2 * (y_array[IDX(i,j-1)] + y_array[IDX(i,j+1)])
+							 + cu3 * y_array[IDX(i,j)];
 		}
 	}
-	// iterate over subdomain boundaries
+
+	// Iterate over subdomain boundaries
+
 	// West face
 	i=0;
 	for (j=1; j<nyl-1; j++)
 	{
-		ydotarray[IDX(i,j)] = cu1*(udata->Wrecv[NVARS*j]   + yarray[IDX(i+1,j)])
-						 + cu2*(yarray[IDX(i,j-1)] + yarray[IDX(i,j+1)])
-						 + cu3*yarray[IDX(i,j)];
+		y_dot_array[IDX(i,j)] = cu1 * (udata->Wrecv[NVARS*j] + y_array[IDX(i+1,j)])
+						 + cu2 * (y_array[IDX(i,j-1)] + y_array[IDX(i,j+1)])
+						 + cu3 * y_array[IDX(i,j)];
 	}
 	// East face
 	i=nxl-1;
 
 	for (j=1; j<nyl-1; j++)
 	{
-		ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + udata->Erecv[NVARS*j])
-						 + cu2*(yarray[IDX(i,j-1)] + yarray[IDX(i,j+1)])
-						 + cu3*yarray[IDX(i,j)];
+		y_dot_array[IDX(i,j)] = cu1 * (y_array[IDX(i-1,j)] + udata->Erecv[NVARS*j])
+						 + cu2 * (y_array[IDX(i,j-1)] + y_array[IDX(i,j+1)])
+						 + cu3 * y_array[IDX(i,j)];
 	}
-	// South face: absorbing boundary at phi = 0, if js = 0 and time < TBOUNDARY, so that no backwards travelling waves occur
+	// South face
 	j=0;
 	for (i=1; i<nxl-1; i++)
 	{
-		ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + yarray[IDX(i+1,j)])
-						 + cu2*(udata->Srecv[NVARS*i]   + yarray[IDX(i,j+1)])
-						 + cu3*yarray[IDX(i,j)];
+		y_dot_array[IDX(i,j)] = cu1 * (y_array[IDX(i-1,j)] + y_array[IDX(i+1,j)])
+						 + cu2 * (udata->Srecv[NVARS*i] + y_array[IDX(i,j+1)])
+						 + cu3 * y_array[IDX(i,j)];
 	}
 	// North face
 	j=nyl-1;
 	for (i=1; i<nxl-1; i++)
 	{
-		ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + yarray[IDX(i+1,j)])
-						 + cu2*(yarray[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
-						 + cu3*yarray[IDX(i,j)];
+		y_dot_array[IDX(i,j)] = cu1 * (y_array[IDX(i-1,j)] + y_array[IDX(i+1,j)])
+						 + cu2 * (y_array[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
+						 + cu3 * y_array[IDX(i,j)];
 	}
 
 	// South-West corner
 	i = 0;
 	j = 0;
-	ydotarray[IDX(i,j)] = cu1*(udata->Wrecv[NVARS*j] + yarray[IDX(i+1,j)])
-						   + cu2*(udata->Srecv[NVARS*i] + yarray[IDX(i,j+1)])
-						   + cu3*yarray[IDX(i,j)];
+	y_dot_array[IDX(i,j)] = cu1 * (udata->Wrecv[NVARS*j] + y_array[IDX(i+1,j)])
+						   + cu2 * (udata->Srecv[NVARS*i] + y_array[IDX(i,j+1)])
+						   + cu3 * y_array[IDX(i,j)];
 
 	// North-West corner
 	i = 0;
 	j = nyl-1;
-	ydotarray[IDX(i,j)] = cu1*(udata->Wrecv[NVARS*j] + yarray[IDX(i+1,j)])
-						   + cu2*(yarray[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
-						   + cu3*yarray[IDX(i,j)];
+	y_dot_array[IDX(i,j)] = cu1 * (udata->Wrecv[NVARS*j] + y_array[IDX(i+1,j)])
+						   + cu2 * (y_array[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
+						   + cu3 * y_array[IDX(i,j)];
 
 	// South-East corner
 	i = nxl-1;
 	j = 0;
-	ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + udata->Erecv[NVARS*j])
-							+ cu2*(udata->Srecv[NVARS*i] + yarray[IDX(i,j+1)])
-							+ cu3*yarray[IDX(i,j)];
+	y_dot_array[IDX(i,j)] = cu1 * (y_array[IDX(i-1,j)] + udata->Erecv[NVARS*j])
+							+ cu2 * (udata->Srecv[NVARS*i] + y_array[IDX(i,j+1)])
+							+ cu3 * y_array[IDX(i,j)];
 
 
 	// North-East corner
 	i = nxl-1;
 	j = nyl-1;
-	ydotarray[IDX(i,j)] = cu1*(yarray[IDX(i-1,j)] + udata->Erecv[NVARS*j])
-						   + cu2*(yarray[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
-						   + cu3*yarray[IDX(i,j)];
+	y_dot_array[IDX(i,j)] = cu1 * (y_array[IDX(i-1,j)] + udata->Erecv[NVARS*j])
+						   + cu2 * (y_array[IDX(i,j-1)] + udata->Nrecv[NVARS*i])
+						   + cu3 * y_array[IDX(i,j)];
 
+	// Parameter beta (b)
 	realtype b;
 
-		// Add other terms in equations
+		// Add terms other than diffusion (model dependent), in this case
+		// Z' += v0 + v1*b - v2 + v3 + kf*Y - k*Z
+		// Y' += v2 + v3 + kf*Y
+
+	if (JUST_DIFFUSION == 0) // If JUST_DIFFUSION = 1 then omit this step leaving only diffusion terms
+	{
+
 		for (j=0; j<nyl; j++)
 		{
-			yy = YMIN + (udata->js+j)*(udata->dy);
+
+			yy = YMIN + (udata->js+j) * (udata->dy);
+
+			// Set b to either spatially constant BETA if VARY_BETA = 0, or varying linearly with y
+			if (VARY_BETA == 0)
+			{
+				b = BETA;
+			}
+			else if (VARY_BETA == 1)
+			{
+				// Beta varying linearly from BETA_MIN to BETA_MAX
+				b = BETA_MIN + yy * (BETA_MAX - BETA_MIN) / (YMAX - YMIN);
+			}
+
 
 			for (i=0; i<nxl; i++)
 			{
-				xx = XMIN + (udata->is+i)*(udata->dx);
+				xx = XMIN + (udata->is+i) * (udata->dx);
 
-				if (VARYBETA == 0)
-				{
-					b = BETA;
-				}
-				else if (VARYBETA == 1)
-				{
-					// beta varying linearly from BETAMIN to BETAMAX
-					b = BETAMIN + yy*(BETAMAX - BETAMIN)/(YMAX - YMIN);
-				}
-
-				realtype Z = yarray[IDX(i,j)];
-				realtype Y = yarray[IDX(i,j)+1];
+				realtype Z = y_array[IDX(i,j)];
+				realtype Y = y_array[IDX(i,j)+1];
 
 				// Algebraic equations
 				realtype v2 = VM2 * pow(Z,n) / ( pow(K2,n) + pow(Z,n) );
 				realtype v3 = VM3 * pow(Y,m) * pow(Z,p) / ( (pow(KR,m) + pow(Y,m)) * (pow(KA,p) + pow(Z,p)) );
 
-				if (JUSTDIFFUSION == 0)
-				{
-					// If we are on the north or south boundary of the entire domain and t<TBOUNDARY, set u_t = 0 to simulate
-					// Dirichlet boundary conditions with values equal to the initial conditions
 
-					// North boundary of the domain
-					if (udata->je == udata->ny-1 && t<TBOUNDARY && j == nyl-1)
-					{
-						ydotarray[IDX(i,j)] = 0; 	// Z
-						ydotarray[IDX(i,j)+1] = 0;  // Y
-					}
-					// South boundary of the domain
-					else if (udata->js == 0 && t<TBOUNDARY && j == 0)
-					{
-						ydotarray[IDX(i,j)] = 0; 	// Z
-						ydotarray[IDX(i,j)+1] = 0;  // Y
-					}
-					// OPTIONAL - for barriers to break the wave that disappear at some time specified, keep derivative constant at barriers
+				// If we are on the north or south boundary of the entire domain and t<T_BOUNDARY, set u_t = 0 to simulate
+				// Dirichlet boundary conditions with values equal to the initial conditions:
+
+				// North boundary of the domain
+				if (udata->je == udata->ny-1 && j == nyl-1 && t<T_BOUNDARY)
+				{
+					y_dot_array[IDX(i,j)] = 0; 		// Z
+					y_dot_array[IDX(i,j)+1] = 0;  	// Y
+				}
+				// South boundary of the domain
+				else if (udata->js == 0 && j == 0 && t<T_BOUNDARY)
+				{
+					y_dot_array[IDX(i,j)] = 0; 		// Z
+					y_dot_array[IDX(i,j)+1] = 0; 	// Y
+				}
+				// OPTIONAL - for barriers to break the wave that disappear at some time specified, keep derivative constant at barriers
 //					else if ((xx <= 15 || xx >= 25) && yy >= 0 && yy <= 40 && t<12.8)
 //					{
-//						ydotarray[IDX(i,j)] = 0; 	// Z
-//						ydotarray[IDX(i,j)+1] = 0;  // Y
+//						y_dot_array[IDX(i,j)] = 0; 		// Z
+//						y_dot_array[IDX(i,j)+1] = 0;  	// Y
 //					}
-					else
-					{
-						ydotarray[IDX(i,j)] += v0 + v1*b - v2 + v3 + kf*Y - k*Z;  // Z
-						ydotarray[IDX(i,j)+1] += v2 - v3 - kf*Y;				  // Y
-					}
+				else
+				{
+					// Add rest of the RHS of the ODEs
+					y_dot_array[IDX(i,j)] += v0 + v1*b - v2 + v3 + kf*Y - k*Z;  // Z
+					y_dot_array[IDX(i,j)+1] += v2 - v3 - kf*Y;				    // Y
 				}
 			}
 		}
+	}
 
-	return 0;                                      // Return with success
+	return 0; // Return with success
 }
 
 /*-------------------------------
@@ -741,17 +725,18 @@ static int check_flag(void *flagvalue, const string funcname, int opt)
 	return 0;
 }
 
+
 // Set up parallel decomposition
-static int SetupDecomp(UserData *udata)
+static int setup_decomp(UserData *udata)
 {
 	// check that this has not been called before
 	if (udata->Erecv != NULL || udata->Wrecv != NULL ||
 			udata->Srecv != NULL || udata->Nrecv != NULL) {
-		cerr << "SetupDecomp warning: parallel decomposition already set up\n";
+		cerr << "setup_decomp warning: parallel decomposition already set up\n";
 		return 1;
 	}
 
-	// get suggested parallel decomposition
+	// get suggested parallel decomposition based on mesh size, outputs dimensions of each subdomain (dims)
 	int ierr, dims[] = {0, 0};
 	ierr = MPI_Comm_size(MPI_COMM_WORLD, &(udata->nprocs));
 	if (ierr != MPI_SUCCESS) {
@@ -792,7 +777,6 @@ static int SetupDecomp(UserData *udata)
 	udata->nyl = (udata->je)-(udata->js)+1;
 
 	// determine if I have neighbors, and allocate exchange buffers
-
 	udata->Wrecv = new realtype[NVARS*(udata->nyl)];
 	udata->Wsend = new realtype[NVARS*(udata->nyl)];
 
@@ -809,12 +793,12 @@ static int SetupDecomp(UserData *udata)
 }
 
 // Perform neighbor exchange
-static int Exchange(N_Vector y, UserData *udata)
+static int exchange(N_Vector y, UserData *udata)
 {
 	// local variables
 	MPI_Request reqSW, reqSE, reqSS, reqSN, reqRW, reqRE, reqRS, reqRN;
 	MPI_Status stat;
-	int ierr, i, ipW=-1, ipE=-1, ipS=-1, ipN=-1;			// ip* are the ranks of neighbours
+	int ierr, i, ipW=-1, ipE=-1, ipS=-1, ipN=-1;			// ip* are the ranks of neighbours defined later by MPI_Cart_shift
 	int coords[2], dims[2], periods[2];
 	int nyl = udata->nyl;
 	int nxl = udata->nxl;
@@ -855,9 +839,9 @@ static int Exchange(N_Vector y, UserData *udata)
 	//printf("Rank %d has neighbours N:%d, S:%d, E:%d, W:%d and coordinates (%d, %d)\n", udata->rank, ipN, ipS, ipE, ipW, coords[0], coords[1]);
 
 	/* Open Irecv buffers
-	 *  Wrecv: place for received data to go
-	 *  NVARS*nyl: length of data
-	 *  ipW: rank of process to receive from
+	 *  reqR*: place for received data to go
+	 *  NVARS*nyl or NVARS*nxl: length of data
+	 *  ip*: rank of process to receive from
 	 */
 	ierr = MPI_Irecv(udata->Wrecv, NVARS*(udata->nyl), REALTYPE_MPI_TYPE, ipW,
 			MPI_ANY_TAG, udata->comm, &reqRW);
@@ -888,6 +872,8 @@ static int Exchange(N_Vector y, UserData *udata)
 	}
 
 	// Send data
+
+	// Send West side
 	for (i=0; i<nyl; i++)
 	{
 		udata->Wsend[2*i] = Y[IDX(nxl-1,i)];
@@ -900,6 +886,7 @@ static int Exchange(N_Vector y, UserData *udata)
 		return -1;
 	}
 
+	// Send East side
 	for (i=0; i<nyl; i++)
 	{
 		udata->Esend[2*i] = Y[IDX(0,i)];
@@ -912,6 +899,7 @@ static int Exchange(N_Vector y, UserData *udata)
 		return -1;
 	}
 
+	// Send South side
 	for (i=0; i<nxl; i++)
 	{
 		udata->Ssend[2*i] = Y[IDX(i,nyl-1)];
@@ -924,6 +912,7 @@ static int Exchange(N_Vector y, UserData *udata)
 		return -1;
 	}
 
+	// Send North side
 	for (i=0; i<nxl; i++)
 	{
 		udata->Nsend[2*i] = Y[IDX(i,0)];
@@ -986,8 +975,8 @@ static int Exchange(N_Vector y, UserData *udata)
 	return 0;     // return with success flag
 }
 
-// Initialize memory allocated within Userdata
-static int InitUserData(UserData *udata)
+// Initialize memory allocated within UserData
+static int init_user_data(UserData *udata)
 {
 	udata->nx = 0;
 	udata->ny = 0;
@@ -1015,8 +1004,8 @@ static int InitUserData(UserData *udata)
 	return 0;     // return with success flag
 }
 
-// Free memory allocated within Userdata
-static int FreeUserData(UserData *udata)
+// Free memory allocated within UserData
+static int free_user_data(UserData *udata)
 {
 	// free exchange buffers
 	if (udata->Wrecv != NULL)  delete[] udata->Wrecv;
