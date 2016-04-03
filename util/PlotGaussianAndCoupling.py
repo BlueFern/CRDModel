@@ -10,13 +10,13 @@ import math
 
 # Gaussian Curvature
 def G(t, r, R):
-    return np.cos(t) / (r*(R+r*np.cos(t)))
+    return np.cos(t) / (r * (R + r * np.cos(t)))
 
 # Coupling Strength - see Kneer et al. (2014) or thesis for details
 def C(t, r, R):
     a = np.sqrt(R**2 - r**2)
     eta = math.atanh(a/R)
-    theta2 = np.arccos(R/r - a**2/(r*(R+r*np.cos(t))))
+    theta2 = np.arccos(R/r - a**2 / (r * (R + r * np.cos(t))))
     return 10*(math.cosh(eta) - np.cos(theta2))**2 / a**2
 
 r = 20 / (2* np.pi)

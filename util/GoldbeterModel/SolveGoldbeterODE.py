@@ -1,5 +1,9 @@
 #!/usr/bin/env python
 
+'''
+Solve the Goldbeter ODE system for user specified beta
+'''
+
 import numpy as np
 from scipy import integrate
 from matplotlib.pylab import *
@@ -11,6 +15,7 @@ beta = 0.0
 
 def goldbeter(t, y):
 
+    # Model parameters
     v_0 = 1
     k = 10
     k_f = 1
@@ -102,4 +107,5 @@ if __name__ == '__main__':
     ax2.set_xlabel('Time')
     ax2.set_ylabel('Y')
 
+    # Print the last output values as the stable state Zs, Ys of the ODE system. Can be used by C script
     print Z[-1], Y[-1]

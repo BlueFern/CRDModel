@@ -1,4 +1,6 @@
-# Show Gaussian curvature and coupling strength of the torus
+'''
+Show the Gaussian curvature and coupling strength of the torus on a 3D torus
+'''
 
 # imports
 import vtk
@@ -33,9 +35,9 @@ def PTtoETA(phi, theta, r, R):
     eta = math.atanh(a/R)
     
     if theta >= 0 and theta <= np.pi: 
-        theta_i = math.acos( R/r - math.pow(a,2)/(r*(R+r*np.cos(theta))))  
+        theta_i = math.acos( R/r - math.pow(a,2) / (r * (R + r * np.cos(theta))))  
     else:
-        theta_i = -math.acos( R/r - math.pow(a,2)/(r*(R+r*np.cos(theta))))    
+        theta_i = -math.acos( R/r - math.pow(a,2) / (r * (R + r * np.cos(theta))))    
     
     return eta, theta_i, a
     
@@ -46,28 +48,24 @@ def GenCurvatureCoupling(programArguments):
     # Load relevant parameters from ini file
     conf = ConfigObj(programArguments)
     parameters = conf['Parameters']
-    majorCirc = parameters['majorCirc']
-    thetaMesh = parameters['thetaMesh']
+    majorCirc = parameters['surfaceLength']
+    minorCirc = parameters['surfaceWidth']
+    thetaMesh = parameters['xMesh']
 
-    # Minor radius of torus
-    r = 20/(2*np.pi)
-    
-    # Major radius of torus
+    # Minor rand major radii
+    r = float(minorCirc)/(2*np.pi)
     R = float(majorCirc)/(2*np.pi)
-    
     
     # Read geometry from disk
     torusReader = vtk.vtkXMLPolyDataReader()
-    torusReader.SetFileName("torus_R" + majorCirc + "_mesh" + thetaMesh + ".vtp")
+    torusReader.SetFileName("torus_R" + majorCirc + "_r" + minorCirc + "_mesh" + thetaMesh + ".vtp")
     torusReader.Update()
-    
     torus = torusReader.GetOutput()
     
     # Obtain cell centres
     cellCentresFilter = vtk.vtkCellCenters()
-    cellCentresFilter.SetInput(torus)
+    cellCentresFilter.SetInputData(torus)
     cellCentresFilter.Update()
-
     cellCentres = cellCentresFilter.GetOutput()
     
     gaussianCurvature = vtk.vtkDoubleArray()
@@ -80,32 +78,31 @@ def GenCurvatureCoupling(programArguments):
     for cId in range(cellCentres.GetNumberOfPoints()):
         point = cellCentres.GetPoint(cId)
         
-        phi, theta = XYZtoPT(point,r,R)              
+        phi, theta = XYZtoPT(point,r,R)      
+
+        #Convert phi, theta        
+        eta, theta_i, a = PTtoETA(phi, theta, r, R)        
         
         # Gaussian curvature
-        resultG = np.cos(theta)/(r*(R+r*np.cos(theta)))
+        resultG = np.cos(theta) / (r * (R + r * np.cos(theta)))
         
-        #Convert phi, theta        
-        eta, theta_i, a = PTtoETA(phi, theta, r, R)
-        
-        # Coupling strength
-        resultC = 10*math.pow((math.cosh(eta) - np.cos(theta_i)),2)/math.pow(a,2)   # Not sure why 10 is there but is necessaryo
+        # Coupling strength (not sure why 10 is there but is necessary)
+        resultC = 10 * math.pow((math.cosh(eta) - np.cos(theta_i)),2) / math.pow(a,2)   
         
         gaussianCurvature.InsertNextValue(resultG)
         couplingStrength.InsertNextValue(resultC)
     
-    torus.GetCellData().SetScalars(gaussianCurvature)
+    torus.GetCellData().AddArray(gaussianCurvature)
     torus.GetCellData().AddArray(couplingStrength)  
     
-    outputFileName = "CurvatureCoupling_torus_R" + majorCirc + "_mesh" + thetaMesh + ".vtp"
-    print "Saving output to file", outputFileName 
+    outputFileName = "CurvatureCoupling_torus_R" + majorCirc + "_r" + minorCirc + "_mesh" + thetaMesh + ".vtp"
     
     writer = vtk.vtkXMLPolyDataWriter()
-    writer.SetInput(torus)
+    writer.SetInputData(torus)
     writer.SetFileName(outputFileName)
     writer.Update() 
     
-    
+    print "Saving output to file", outputFileName 
     
 if __name__ == '__main__':
     if len(sys.argv) != 2:

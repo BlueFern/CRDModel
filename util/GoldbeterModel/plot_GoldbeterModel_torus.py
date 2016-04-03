@@ -1,4 +1,4 @@
-''' Plot the first variable u of the Fitz-Hugh Nagumo model on a torus, shown 
+''' Plot the first variable u of the Goldbeter model on a torus, shown 
     as a flat surface with periodic boundaries '''
 
 # imports
@@ -10,7 +10,6 @@ from matplotlib import cm
 import matplotlib.pyplot as plt
 import os
 from configobj import ConfigObj
-
 
 def plot_GoldbeterModel_torus(programArguments):
 
@@ -95,7 +94,7 @@ def plot_GoldbeterModel_torus(programArguments):
         rHopf = 0.774*2*np.pi
 
     # Create subdirectory for the png files
-    os.system("mkdir png")
+    os.system("mkdir -p png")
 
     # generate plots of results
     for tstep in range(nt):
@@ -119,6 +118,7 @@ def plot_GoldbeterModel_torus(programArguments):
         ax.set_ylabel('phi')
         fig.colorbar(img)
 
+        # plot dashed lines where the Hopf bifurcations are
         if varyBeta == 1:
             plt.axhline(y=lHopf, color = 'r', linewidth=1, linestyle='dashed')
             plt.axhline(y=rHopf, color = 'r', linewidth=1, linestyle='dashed')

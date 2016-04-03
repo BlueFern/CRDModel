@@ -1,3 +1,7 @@
+'''
+Generates a torus based on parameters from the specified ini file
+'''
+
 import sys
 import vtk
 import numpy as np
@@ -9,44 +13,52 @@ def GenTorus(programArguments):
     # Load relevant parameters from ini file
     conf = ConfigObj(programArguments)
     parameters = conf['Parameters']
-    majorCirc = parameters['majorCirc']
-    thetaMesh = parameters['thetaMesh']
-    
+    majorCirc = parameters['surfaceLength']
+    minorCirc = parameters['surfaceWidth']
+    thetaMesh = parameters['xMesh']
+
+    # Minor and major radii
+    r = float(minorCirc)/(2*np.pi)
+    R = float(majorCirc)/(2*np.pi)
+
+    # Mesh sizes
     thetaResolution = int(thetaMesh)    
+    phiResolution = int(thetaResolution*(R/r))
     
+    # Generate a torus 
     torusSource = vtk.vtkSuperquadricSource()
     torusSource.SetCenter(0.0, 0.0, 0.0)
     torusSource.SetScale(1.0, 1.0, 1.0)
     torusSource.SetToroidal(1) 
-    torusSource.SetThetaRoundness (1)
-    torusSource.SetPhiRoundness (1)
-    torusSource.SetPhiResolution(thetaResolution)   # SuperquadricSource reverses phi and theta to be confusing - this is not an error
+    torusSource.SetThetaRoundness(1)
+    torusSource.SetPhiRoundness(1)
 
-    torusSource.SetSize(float(majorCirc)/(2*np.pi)+20/(2*np.pi))      
-    torusSource.SetThickness (20/float(majorCirc))    
-    torusSource.SetThetaResolution(thetaResolution*(float(majorCirc)/20))
-    #torusSource.SetThetaResolution(thetaResolution)
-    
-    tri = vtk.vtkTriangleFilter()
-    tri.SetInputConnection(torusSource.GetOutputPort())
-     
+    # SuperquadricSource reverses phi and theta to be confusing - this is not an error
+    torusSource.SetPhiResolution(thetaResolution)   
+    torusSource.SetThetaResolution(phiResolution)
+
+    # Don't change these!
+    torusSource.SetSize(R + r)      
+    torusSource.SetThickness(r/R)    
+
     # The quadric has nasty discontinuities from the way the edges are generated
     # so let's pass it though a CleanPolyDataFilter and merge any points which
-    # are coincident, or very close
+    # are coincident, or very close. First convert quads into triangles
+    tri = vtk.vtkTriangleFilter()
+    tri.SetInputConnection(torusSource.GetOutputPort())
     cleaner = vtk.vtkCleanPolyData()
     cleaner.SetInputConnection(tri.GetOutputPort())
     cleaner.SetTolerance(0.00005)
-    
     cleaner.Update()
     
-    #outputFileName = "torus_R" + majorCirc + "_tmesh" + thetaMesh + "_pmesh" + thetaMesh + ".vtp"
-    outputFileName = "torus_R" + majorCirc + "_mesh" + thetaMesh + ".vtp"
-    print "Saving output to file", outputFileName 
-    
+    outputFileName = "torus_R" + majorCirc + "_r" + minorCirc + "_mesh" + thetaMesh + ".vtp"
+
     writer = vtk.vtkXMLPolyDataWriter()
-    writer.SetInput(cleaner.GetOutput())
+    writer.SetInputData(cleaner.GetOutput())
     writer.SetFileName(outputFileName)
     writer.Update()
+    
+    print "Saving output to file", outputFileName 
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:

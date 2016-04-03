@@ -50,7 +50,7 @@ def plot_GoldbeterModel_flat(programArguments):
         subdomains[i,:] = subd[2:6]
        
        
-    # First variable ****   
+    # First variable ********   
     # load first processor's data, and determine total number of time steps
     data = np.loadtxt('GoldbeterModel_flat_Z.000.txt', dtype=np.double)
     nt = np.shape(data)[0]
@@ -95,7 +95,7 @@ def plot_GoldbeterModel_flat(programArguments):
         rHopf = 0.774*float(surfaceLength)
 
     # Create subdirectory for the png files
-    os.system("mkdir png")
+    os.system("mkdir -p png")
 
     # generate plots of results
     for tstep in range(nt):
@@ -119,6 +119,7 @@ def plot_GoldbeterModel_flat(programArguments):
         ax.set_ylabel('y')
         fig.colorbar(img)
 
+        # plot dashed lines where the Hopf bifurcations are
         if varyBeta == 1:
             plt.axhline(y=lHopf, color = 'r', linewidth=1, linestyle='dashed')
             plt.axhline(y=rHopf, color = 'r', linewidth=1, linestyle='dashed')

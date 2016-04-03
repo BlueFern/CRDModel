@@ -1,4 +1,4 @@
-''' Plot the first variable u of the Fitz-Hugh Nagumo model on a flat surface 
+''' Plot the first variable U of the FitzHugh Nagumo model on a flat surface
     with periodic boundaries '''
 
 # imports
@@ -90,11 +90,11 @@ def plot_FHNmodel_flat(programArguments):
     mintemp = results.min()
 
     if varyBeta == 1:
-        # Obtain location of Hopf by inverse of beta = BETAMIN + (BETAMAX - BETAMIN)/(surfacelength)*phi
+        # Obtain location of Hopf (at beta = 1) by inverse of beta = BETAMIN + (BETAMAX - BETAMIN)/(surfacelength)*phi
         Hopf = (1.0 - betaMin)*float(surfaceLength)/(betaMax - betaMin)
 
     # Create subdirectory for the png files
-    os.system("mkdir png")
+    os.system("mkdir -p png")
 
     # generate plots of results
     for tstep in range(nt):

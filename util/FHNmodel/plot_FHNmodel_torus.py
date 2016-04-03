@@ -91,11 +91,11 @@ def plot_FHNmodel_torus(programArguments):
     mintemp = 0.9*results.min()
 
     if varyBeta == 1:
-        # Obtain location of Hopf by inverse of beta = BETAMIN + (BETAMAX - BETAMIN)/(2pi)*phi
+        # Obtain location of Hopf (at beta = 1) by inverse of beta = BETAMIN + (BETAMAX - BETAMIN)/(2pi)*phi
         Hopf = (1.0 - betaMin)*2*np.pi/(betaMax - betaMin)
 
     # Create subdirectory for the png files
-    os.system("mkdir png")
+    os.system("mkdir -p png")
 
     # generate plots of results
     for tstep in range(nt):
@@ -119,6 +119,7 @@ def plot_FHNmodel_torus(programArguments):
         ax.set_ylabel('phi')
         fig.colorbar(img)
 
+        # plot dashed lines where the Hopf bifurcation is
         if varyBeta == 1:
             plt.axhline(y=Hopf, color = 'r', linewidth=1, linestyle='dashed')
 
