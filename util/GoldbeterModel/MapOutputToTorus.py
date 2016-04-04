@@ -37,11 +37,13 @@ def XYZtoRC(xyz,ny,nx,r,R):
 
 if __name__ == '__main__':
 
-def MapOutputToTorus(programArguments):
-    ''' programArguments: ini file containing model parameters'''
-    
+    # Obtain ini file
+    parser = argparse.ArgumentParser()
+    parser.add_argument("configFile", help="config file path")
+    args = parser.parse_args()
+
     # Load relevant parameters from ini file
-    conf = ConfigObj(programArguments)
+    conf = ConfigObj(args.configFile)
     parameters = conf['Parameters']
     systemParameters = conf['System']
     majorCirc = parameters['surfaceLength']

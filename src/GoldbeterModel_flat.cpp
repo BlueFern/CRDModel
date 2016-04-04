@@ -96,7 +96,7 @@ double T_FINAL = 0.0;				// Time to run simulation
 int X_MESH = 0;						// Mesh size in x direction
 double BETA_MIN = 0;				// Minimum beta value when it's spatially varied
 double BETA_MAX = 0;				// Maximum beta value when it's spatially varied
-int INCLUDE_ALL_VARS = 0;			// Int for whether we write all variables to file (1) or only the main activator variable u (0)
+int INCLUDE_ALL_VARS = 0;			// Int for whether we write all variables to file (1) or only the main variable Z (0)
 int VARY_BETA = 0;					// Int for whether to vary beta over the surface of the torus (1) or keep it spatially constant (0)
 int JUST_DIFFUSION = 0;				// Int for whether to have no reaction terms (1) to simulate the diffusion equation, or normal (0)
 int IC_TYPE = 0;					// Int for the initial conditions when beta is spatially varied. 0: homogeneous ICs, 1: initial perturbation, 2: random ICs.
@@ -292,7 +292,7 @@ int main(int argc, char* argv[])
 			}
 			else if (VARY_BETA == 1)
 			{
-				cout << "   Beta varied over torus\n";
+				cout << "   Beta varied over surface\n";
 				if (IC_TYPE == 0) {cout << "   Homogeneous ICs\n\n";}
 				if (IC_TYPE == 1) {cout << "   ICs: initial perturbation\n\n";}
 				if (IC_TYPE == 2) {cout << "   Random ICs\n\n";}
@@ -529,6 +529,7 @@ static int f(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 	// exchange boundary data with neighbors
 	int ierr = exchange(y, udata);
 	if (check_flag(&ierr, "exchange", 1)) return -1;
+
 
 	// Add diffusion term, approximated by finite difference methods
 
