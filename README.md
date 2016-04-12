@@ -15,7 +15,7 @@ Both models are applied to the surface of a torus. A torus is chosen as it has a
 How to Compile
 --------------
 
-The project depends on MPI and Sundials libraries.
+The project depends on MPI and Sundials libraries. Note that several Python scripts require "ffpmeg" to be installed.
 
 Configure the project with CMake and specify the *out-of-source* build directory.
 
